@@ -1,0 +1,58 @@
+# `Redis`
+
+## 1. `NoSQL`数据库简介
+
+### 1.1 技术发展
+
+我们之前学习了许多东西，按照解决的东西进行分类可以分为：
+
+1. 解决功能性问题：`Java Jsp RDBMS Tomcat HTML Linux JDBC SVN`
+2. 解决扩展性问题：`Struts Spring SpringMVC Hibernate MyBatis`
+3. 解决性能的问题：`NoSQL JavaThread Hadoop Nginx MQ ElasticSearch`
+
+`Web 1.0`时代：数据访问量非常有限，用单点服务器就可以完成大部分工作。想想这种架构有什么缺点？
+
+![](https://img-blog.csdnimg.cn/cad546abc7124f9c9ab94853f182df2a.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAQ3JBY0tlUi0x,size_20,color_FFFFFF,t_70,g_se,x_160)
+
+`Web 2.0`时代：随着访问量的增加，时代快车进入了`Web 2.0`，访问量越大给处理器和内存都造成了前所未有的压力，这就给数据库的访问造成了很大的压力，那这些问题如何解决呢？可以使用`NoSQL`来解决。
+
+![](https://img-blog.csdnimg.cn/5a4e531ebc1646b1a0b86f6460bf5ada.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAQ3JBY0tlUi0x,size_20,color_FFFFFF,t_70,g_se,x_16)
+
+如何解决处理器和内存的压力？可以将服务器做集群，然后在访问请求和服务器之间加上一个`Nginx`用来做负载均衡。但是这种将服务器做集群的方式会产生一个新的问题，就是用户访问的`session`信息应该放在哪里呢？如果第一次访问，请求发送到了服务器一，那按照之前`session`存储在服务器中的这种做法，此时`session`就会放到第一个服务器上，但是如果后面用户再发了一次请求，这时请求来到第二个服务器上，此时第二台服务器是没有`session`对象，此时就无法证明用户是已登录状态就无法进行后续的操作。
+
+那如何解决`session`存储或者说用户登录信息存储的问题呢？
+
+> 1. 将用户登录信息存储到客户端`cookie`中，每次请求都带上`cookie`，内含用户信息，但是因为该种方式是存储在客户端的，每次请求都将带上，可能某些恶意用户在他人的`cookie`里头获取了一些重要信息或者将一些恶意信息捆绑在`cookie`往服务器中发送导致服务器出现安全性问题，这就使得该种方式变得不是很好，有没有更好的方案呢？
+> 2. `session`复制，我们依然还是使用`session`，我们知道`session`含有用户登录信息保存在服务端，那么第一次用户请求，我们获取到`session`对象之后我们将其复制给其它的服务器，这样一来，以后每次访问都可以获取到`session`对象也就解决了之前的问题，但是这样一来每个都复制一遍，有时候请求压根不到某些服务器去，如果说第一个`cookie`方案造成了安全性的问题，那么这个方案就造成了空间的浪费
+> 3. 将用户信息存储在文件服务器或者数据库里，这样虽然解决了第一种方案的安全性问题以及第二种方案的大量空间浪费的问题，但是放在文件服务器或者数据库每次用户请求都要访问文件服务器或者数据库这样就产生了效率问题，因为每次都要进行磁盘读写也就是`I/O`操作
+> 4. 将用户信息放在`NoSQL`数据库中，因为`NoSQL`中的数据都放在内存中，速度非常快而且结构简单，每次用户请求我们都去`NoSQL`数据库中验证下看下是否是登录状态，如果是就继续后面的请求，如果不是就拦截，使用`NoSQL`数据库不仅很安全解决了第一个`cookie`方案的安全性问题，而且所占空间非常小这就解决了`session复制`该方案的空间浪费问题，除此之外使用`NoSQL`不用进行`I/O磁盘读写`，因为是`NoSQL`数据库的数据是存放到内存中的，这就大大提高了效率
+
+![](https://img-blog.csdnimg.cn/fc68a7dee5a24fc0bd7b80a26ece2dfe.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAQ3JBY0tlUi0x,size_20,color_FFFFFF,t_70,g_se,x_16)
+
+`NoSQL`除了可以解决`session`存储的问题之外，还可以将频繁访问关系型数据库的数据存储到`NoSQL`数据库中，相当于把磁盘的数据放到内存中做了个缓存，可以大大的提高运行效率。`NoSQL`数据库打破了传统关系型数据库以业务逻辑为依据的存储模式，而针对不同数据结构类型改为以性能为最优先的存储方式。
+
+![](https://img-blog.csdnimg.cn/41054c6f9195472586a301c27ca7fed7.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAQ3JBY0tlUi0x,size_20,color_FFFFFF,t_70,g_se,x_16)
+
+### 1.2 `NoSQL`数据库
+
+`NoSQL`表示的是`Not Only SQL`，表示不仅仅是`SQL`，泛指非关系型数据库，`NoSQL`不依赖业务逻辑方式存储，而是以简单的`key-value`模式存储。因此大大的增加了数据库的扩展能力。`NoSQL`不遵循`SQL`标准，也不支持`ACID`原则，同时其性能远超于关系型数据库。
+
+非关系型数据库适用于：对数据高并发的读写、海量数据的读写、对数据要求高可扩展性的【只要是用不着关系型数据库但是又有存储需求的，或者说用了关系型数据库也无法解决的场景就可以使用非关系型数据库】
+
+常见的非关系型数据库：`Memcache Redis MongoDB 行式数据库 列式数据库 HBase Neo4j`
+
+## 2. `Redis`概述
+
+`Redis`是一个开源的键值对`key-value`存储系统，数据都缓存在内存中，但是`Redis`为了防止一些不可预知的情况会周期性地把数据写入磁盘或者把修改操作写入追加的记录文件。它支持存储的`value`类型很多，包括字符串类型`string`、链表类型`list`、哈希类型`hash`、集合类型`set`、有序集合类型`zset`，这些数据类型都支持`push/pop add/remove`以及取交集并集差集等更丰富的操作，而且这些操作都是原子性的即要么成功要么失败。在此基础上`Redis`支持各种不同方式的排序。`Redis`还实现了主从同步机制`master-slave`。
+
+高频次高并发高可用的数据，大量数据读写，热数据的访问，做分布式架构做`session`共享都可以用`Redis`
+
+1. 通过`List`实现按自然时间排序的数据可以用于最新`N`个数据
+2. 使用`zset`有序集合可以用作排行榜做`Top N`
+3. 使用`Expire`过期可以做时效性的功能比如短信验证码
+4. 使用原子性自增方法`INCR`，自减方法`DECR`可以用作计数器秒杀
+5. 使用`Set`集合可以去除大量数据中的重复数据
+6. 使用`List`集合可以构建队列
+7. 使用`pub/sub`模式可以发布订阅消息系统
+
+`Redis`其实只有`Linux`版本的，微软表示不错所以自己搞了个`windows`版本的`redis`:smiley:
