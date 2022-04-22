@@ -41,7 +41,7 @@
 
 常见的非关系型数据库：`Memcache Redis MongoDB 行式数据库 列式数据库 HBase Neo4j`
 
-## 2. `Redis`概述
+## 2. `Redis`介绍
 
 `Redis`是一个开源的键值对`key-value`存储系统，数据都缓存在内存中，但是`Redis`为了防止一些不可预知的情况会周期性地把数据写入磁盘或者把修改操作写入追加的记录文件。它支持存储的`value`类型很多，包括字符串类型`string`、链表类型`list`、哈希类型`hash`、集合类型`set`、有序集合类型`zset`，这些数据类型都支持`push/pop add/remove`以及取交集并集差集等更丰富的操作，而且这些操作都是原子性的即要么成功要么失败。在此基础上`Redis`支持各种不同方式的排序。`Redis`还实现了主从同步机制`master-slave`。
 
@@ -56,3 +56,33 @@
 7. 使用`pub/sub`模式可以发布订阅消息系统
 
 `Redis`其实只有`Linux`版本的，微软表示不错所以自己搞了个`windows`版本的`redis`:smiley:
+
+`Redis`使用的技术是：单线程 + 多路`IO`复用
+
+### 2.1 `Redis`端口从哪来？
+
+`Redis`的端口是`6379`，为什么是这个呢？
+
+> `Alessia Merz`是一位意大利舞女、女演员。`Redis`作者`Antirez`早年看电视节目，觉得`Merz`在节目中的一些话愚蠢可笑，`Antirez`喜欢造“梗”用于平时和朋友们交流，于是造了一个词`MERZ`，形容愚蠢，与 `stupid`含义相同。到了给`Redis`选择一个数字作为默认端口号时，`Antirez`没有多想，把`MERZ`在手机键盘上对应的数字`6379`拿来用了。:open_mouth:
+
+`Redis`默认有`16`个数据库，初始默认使用`0`号库，使用`select <dbid>`可以用来切换数据库，例如：`select 8`，所有的库都有同样的密码。常用的一些命令：
+
+> -  `select`：选择某个数据库
+>
+> - `dbsize`：查看当前数据库`key`的数量
+>
+> - `flushdb`：清空当前数据库数据
+>
+> - `flushall`：清空全部数据
+
+# 3. 常用五大数据类型
+
+### 3.1 `Redis`键`(key)`
+
+> - `keys * `：查看当前库的所有`key`匹配，例如：`keys *1`
+> - `exists [keyName]`：判断某个`key`是否存在，`1`表示存在，`0`表示不存在
+> - `type [keyName]`：查看某个`key`是什么类型，如果不存在某个`key`则返回`none`
+> - `del [keyName]`：删除某个`key`
+> - `unlink [keyName]`：异步删除，执行时仅仅将`key`从表层删去但其实还没有，真正的删除会在后续异步执行
+> - `expire [keyName] [seconds]`：为给定的`key`设置过期时间
+> - `ttl [keyName]`：查看还有多少秒过期，`-1`表示永不过期，`-2`表示已过期
