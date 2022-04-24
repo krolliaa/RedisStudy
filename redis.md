@@ -89,6 +89,8 @@
 
 ### 3.2 字符串`String`
 
+**<font color="red">注：说的存放的是`String`数据类型是针对`value`而言的而不是`key`而言</font>**
+
 `String`是`Redis`最基本的类型，一个`key`对应着一个`value`。`String`类型是二进制安全的。意味着`Redis`的`String`可以包含任何数据。比如图片或者序列化后的对象。`String`类型是`Redis`最基本的数据类型，一个`Redis`中字符串`value`最多可以是`512M`
 
 > - `set [key] [value]`：添加键值对
@@ -107,4 +109,66 @@
 
 `Redis`之所以命令都是原子性的其原因是`Redis`是单线程架构。总之原子性操作就是一旦执行就不会被打断的操作【除非强制性，这里指的是正常情况】。
 
-问：`java`中`i++`是否是原子性操作？`i=0`两个线程分别对`i`进行`++100`次，值是多少。
+**问：`java`中`i++`是否是原子性操作？`i=0`两个线程分别对`i`进行`++100`次，值是多少？**
+
+> `Java`是多线程编程语言，所以肯定不是原子性操作，如果两个线程对一个共享变量`i`进行`++100`次的操作，其最后的结果在`2-200`范围之间。比如`A`线程初始化`i=0`，然后一直加到`99`，此时`B`线程初始化`i=0`，打断`A`线程，进行一次`i++`，此时`A`线程抢到`i=1`，然后`B`线程进行`++`一直到`i=100`此时`A`线程再进行最后一次`i=1`对其进行`i++`结果得到的就是：`2`
+>
+> `200`的情况就是类似同步线程的情况，`++`操作的结果保存在缓存当中，但是取数据的时候是从主内存中取的。所以才会出现可能是`2`的局面，只有执行权被另外一个线程抢去的时候才会写进主内存，所以此时另外一个线程拿到的数据就是另外一个线程保存在主内存中的数据。
+
+`String`进阶命令：
+
+> `mset [key1] [value1] [key2] [value2]...`：同时设置多个键值
+>
+> `mget [key1] [key2] [key3]...`：同时取到多个键值
+>
+> `msetnx [key1] [value1] [key2] [value2]...`：设置不存在的数据才能成功但凡有一个`key`在`redis`中式存在的都不成功，因为操作是原子性的
+>
+> `getrange [key] [start] [end]`：获取键值对中范围内中的值比如：`getrange name 0 3[name=lucykroll]`：得到的结果为`lucy`
+>
+> `setrange [key] [start] [value]`：将键值对中对应键的值的`start`位置开始替换成新的值
+>
+> `setex [key] [seconds] [value]`：设置值的时候就设置过期时间，结合`ttl [key]`就可以查看键的过期时间
+>
+> `getset [key] [value]`：以新值换旧值，设置了新值的同时获取旧值，以前不存在的键获取的值为：`(nil)`
+
+**<font color="red">关于`String`字符串在`Redis`中的数据结构：</font>**
+
+> `String`的数据结构为简单动态字符串`SDS:Simple Dynamic String`，表示的是可以修改的字符串，内部结构实现上类似于`Java`的`ArrayList`，采用预分配冗余空间的方式来减少内存的频繁分配。
+>
+> ![](https://img-blog.csdnimg.cn/c61f108365e04799a7a04f404eea5c87.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAQ3JBY0tlUi0x,size_20,color_FFFFFF,t_70,g_se,x_16)
+>
+> 如图所示，内部为当前字符串实际分配空间`capacity`，一般要高于实际字符串长度`len`。当字符串长度小于`1M`时，扩容都是加倍现有的空间，如果超过`1M`扩容时最多只会扩`1M`的空间，需要注意的时字符串最大长度为：`512MB`
+
+### 3.3 列表`List`
+
+单键多值，`Redis`列表时简单的字符串列表，按照插入顺序进行排序。你可以添加一个元素到列表的头部也可以添加元素到列表的尾部。它的底层实际上是一个双向链表，对两端的操作性能要求很高，通过索引下标的操作中间的节点性能会比较差。添加效率较高，查询效率较低。
+
+`List`常用命令：
+
+> `lpush/rpush [key1] [value2] [value3]...`：从左边或者右边插入一个或者多个值
+>
+> `lpop/rpop [key1]`：从左边或者右边取出值，此时键中这个值被弹出，如果取完了这个列表也就不复存在了
+>
+> `rpoplpush [key1] [key2]`：从`key1`列表右边吐出一个值插入到`key2`列表左边
+>
+> `lrange [key] [start] [stop]`：按照索引下标从左到右获取元素，下标从`0`开始，若`stop = -1`则表示取所有值
+>
+> `lindex [key] [index]`：按照索引下标获得元素[从左到右]
+>
+> `llen [key]`：获得列表长度
+>
+> `linsert [key] before [value] [newvalue]`：在`value`的后面插入`newvalue`值
+>
+> `lrem [key] [n] [value]`：从左边删除`n`个`value`[从左到右]
+>
+> `lset [key] [index] [value]`：将列表`key`下标为`index`的值替换成`value`
+
+**<font color="red">关于`List`列表在`Redis`中的数据结构：</font>**
+
+> `List`的数据结构是快速链表`quickList`，首先在列表元素较少的情况下会使用一块连续的内存存储，这个结构式`zipList`，也就是压缩列表。它将所有的元素紧挨着一起存储，分配的是一块连续的内存。当数据量比较多的时候才会改成`quickList`。
+>
+> 因为普通的链表需要的附加指针空间太大，会比较浪费空间。比如这个列表里存储的只是`int`类型的数据，结构上还需要两个额外的指针`prev`和`next`。
+>
+> `Redis`将链表和`zipList`结合起来组成了`quickList`，也就是将多个`zipLisr`使用双向指针串起来。这样即满足了快速的插入删除性能，又不会出现太大的空间荣冗余。
+>
+> ![](https://img-blog.csdnimg.cn/1ac4e2d4c4054d61bc9bc4250d131983.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAQ3JBY0tlUi0x,size_20,color_FFFFFF,t_70,g_se,x_16)
