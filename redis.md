@@ -115,7 +115,7 @@
 >
 > `200`的情况就是类似同步线程的情况，`++`操作的结果保存在缓存当中，但是取数据的时候是从主内存中取的。所以才会出现可能是`2`的局面，只有执行权被另外一个线程抢去的时候才会写进主内存，所以此时另外一个线程拿到的数据就是另外一个线程保存在主内存中的数据。
 
-`String`进阶命令：
+**`String`进阶命令：**
 
 > `mset [key1] [value1] [key2] [value2]...`：同时设置多个键值
 >
@@ -143,7 +143,7 @@
 
 单键多值，`Redis`列表时简单的字符串列表，按照插入顺序进行排序。你可以添加一个元素到列表的头部也可以添加元素到列表的尾部。它的底层实际上是一个双向链表，对两端的操作性能要求很高，通过索引下标的操作中间的节点性能会比较差。添加效率较高，查询效率较低。
 
-`List`常用命令：
+**`List`常用命令：**
 
 > `lpush/rpush [key1] [value2] [value3]...`：从左边或者右边插入一个或者多个值
 >
@@ -179,7 +179,7 @@
 
 `Redis`的`Set`是`String`类型的无序集合。它底层其实是一个`value`为`null`的哈希表，所以添加删除和查找的复杂度都是`O(1)`。
 
-`Set`常用命令：
+**`Set`常用命令：**
 
 > `sadd [key] [value1] [value2] [value3]...`：将一个或者多个`member`元素加入到集合`key`中，如果已经存在的`member`元素将被忽略
 >
@@ -218,7 +218,7 @@
 
 现在我们有了`hash`这种存储方式，我们可以将对象的属性和属性值直接存储在`filed value`而`key`代表某个用户`ID`，这样就存储好了一个对象，非常方便，既不需要重复存储数据，也不会带来反序列化和并发修改控制的问题。
 
-`Hash`常用命令：
+**`Hash`常用命令：**
 
 > `hset <key><field><value>`给`<key>`集合中的`<field>`键赋值`<value>`
 >
@@ -239,3 +239,40 @@
 **<font color="red">关于`Hash`哈希在`Redis`中的数据结构：</font>**
 
 > `Hash`类型对应的数据结构是两种：`zipList`（压缩列表），`hashTable`（哈希表）。当`field-value`长度较短且个数较少时，使用`zipList`，否则使用`hashTable`。
+
+### 3.6 有序集合`Zset`
+
+`Redis`有序集合`Zset`和普通集合`Set`费城相似，是一个没有重复元素的字符串集合。不同之处是有序集合的每个成员都关联了一个评分`score`，这个评分`score`被用来按照从最低分到最高分的方式排序集合中的成员。集合的成员是唯一的，但是评分是可以重复的。因为元素是有序的，所以你可以很快的根据评分`score`或者次序`position`来获取一个范围的元素。
+
+`Zset`常用命令：
+
+> `zadd [key] [score1] [value1] [score2] [value2] [score3] [value3]...`：将一个或者多个`member`元素及其`score`值加入到有序集合`key`当中去，例如：`zadd topn 100 Java 200 C/C++ 300 Python 400 PHP`
+>
+> `zrange [key] [start] [stop] [WITHSCORES/withscores]`：返回有序集合`key`下标在`start stop`之间的元素，例如：`zrange topn 0 -1`以及`zrange topn 0 -1 WITHSCORES`
+>
+> `zrevrange [key] [start] [stop] [WITHSCORES/withscores]`：返回有序集合`key`下标在`start stop`之间的元素【倒序排序】，例如：`zrevrange topn 0 -1`以及`zrange topn 0 -1 WITHSCORES`
+>
+> `zrangebyscore [key] [min] [max] [WITHSCORES/withscores] [limit offset count]`：返回有序集合`key`中，所有的`score`值介于`min`和`max`之间【闭区间】，有序集合成员按`score`递增也就是从小到大的次序排序，例如：`zrangebyscore topn 100 300 withscores`以及`zrangebyscore topn 100 300 withscores limit 0 1`【跟数据库类似】
+>
+> `zrevrangebyscore [key] [max] [min] [WITHSCORES/withscores] [limit offset count]`：返回有序集合`key`中，所有的`score`值介于`max`和`min`之间【闭区间】，有序集合成员按`score`递减也就是从大到小的次序排序，例如：`zrevrangebyscore topn 300 100 withscores`以及`zrevrangebyscore topn 300 100 withscores limit 0 1`【跟数据库类似】
+>
+> `zincrby [key] [increment] [value]`：为元素的`score`加上增量，例如：`zincyby topn 100 Java`
+>
+> `zrem [key] [value]`：删除该集合中指定的元素，例如：`zrem topn PHP`
+>
+> `zcount [key] [min] [max]`：统计在分数区间的元素个数`zcount topn 100 300` ---> `2`
+>
+> `zrank [key] [value]`：返回该值在集合中的排名，从`0`开始
+
+案例：如何利用`zset`实现一个文章访问量的排行榜？
+
+> `zadd topn 1000 v1 2000 v2 3000 v3`
+>
+> `zrevrange topn 0 -1`
+
+**<font color="red">关于`Zset`有序集合在`Redis`中的数据结构：</font>**
+
+> `Zset`的底层结构式`SortedSet`是`Redis`中一个非常特别的数据结构，一方面它等价于`Java`的数据结构`Map<String, Double>`可以给每一个元素`value`赋予一个权重`score`，另一方面它有类似于`TreeSet`，内部的元素会按照权重`score`进行排序，可以得到每一个元素的名词，还可以通过`score`范围来获取元素的列表，`Zset`的底层使用了两个数据结构：
+>
+> 1. `Hash`，`field`为`value`，`value`为`score`
+> 2. 跳跃表，跳跃表的目的在于给元素`value`进行排序，根据`score`的范围获取元素列表，跳跃表可以好好去研究下，非常有意思
