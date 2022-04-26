@@ -208,3 +208,34 @@
 > `Set`数据结构是`dict`字典，字典是用哈希表实现的。
 >
 > `Java`中`HashSet`的内部实现使用的是`HashMap`，只不过所有的`value`都指向同一个对象。`Redis`的`set`结构也是一样，它的内部也使用`hash`结构，所有的`value`都指向同一个内部值。
+
+### 3.5 哈希`Hash`
+
+`Redis`哈希是一个键值对集合，特别适合用于存储对象，其格式为：`[key] [field] [value]`，类似`Java`里的`Map<String, Object>`，用户`ID`为查找的`key`，存储的`value`用户对象包含姓名、年龄、生日等信息，如果用普通的`key/value`结构来存储对象主要有以下`2`种存储方式：
+
+1. 例如`key`为`用户ID`，`value`为序列化的对象`姓名数据 + 年龄数据 + 生日数据据`等，这种存储方式每次修改用户的某个属性都需要修改整个数据，先反序列化改好之后再序列化回去，开销比较大
+2. 例如`key`为`用户ID + 姓名标签`，`value`为`姓名数据`，再新建一个`key`存储`用户ID + 年龄标签`，`value`为`年龄数据`，在新建一个`key`为`用户ID + 年龄标签`，`value`为`年龄数据`，这样子做完才完整的存储一个对象，这种存储方式非常冗余
+
+现在我们有了`hash`这种存储方式，我们可以将对象的属性和属性值直接存储在`filed value`而`key`代表某个用户`ID`，这样就存储好了一个对象，非常方便，既不需要重复存储数据，也不会带来反序列化和并发修改控制的问题。
+
+`Hash`常用命令：
+
+> `hset <key><field><value>`给`<key>`集合中的`<field>`键赋值`<value>`
+>
+> `hget <key1><field>从<key1>集合<field>`取出`value` 
+>
+> `hmset <key1><field1><value1><field2><value2>...`批量设置`hash`的值
+>
+> `hexists<key1><field>`查看哈希表`key`中，给定域`field`是否存在。 
+>
+> `hkeys <key>`列出该`hash`集合的所有`field`
+>
+> `hvals <key>`列出该`hash`集合的所有`value`
+>
+> `hincrby <key><field><increment>`为哈希表`key`中的域`field`的值加上增量`1 -1`
+>
+> `hsetnx <key><field><value>`将哈希表`key`中的域`field`的值设置为`value`，当且仅当域`field`不存在
+
+**<font color="red">关于`Hash`哈希在`Redis`中的数据结构：</font>**
+
+> `Hash`类型对应的数据结构是两种：`zipList`（压缩列表），`hashTable`（哈希表）。当`field-value`长度较短且个数较少时，使用`zipList`，否则使用`hashTable`。
