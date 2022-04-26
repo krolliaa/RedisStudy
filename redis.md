@@ -172,3 +172,39 @@
 > `Redis`将链表和`zipList`结合起来组成了`quickList`，也就是将多个`zipLisr`使用双向指针串起来。这样即满足了快速的插入删除性能，又不会出现太大的空间荣冗余。[巧妙的构思~:cow:]
 >
 > ![](https://img-blog.csdnimg.cn/1ac4e2d4c4054d61bc9bc4250d131983.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAQ3JBY0tlUi0x,size_20,color_FFFFFF,t_70,g_se,x_16)
+
+### 3.4 集合`Set`
+
+`Redis Set`对外提供的功能与`List`列表类似，特殊之处在于列表是允许添加重复的`value`值的但是集合`Set`是不允许的，它可以自动排重，当你需要存储一个列表数据但是又不希望出现重复数据的时候就可以使用`Set`，这将是一个很好的选择，并且`Set`提供了判断某个成员是否在一个`Set`集合内的重要接口，这个也是`List`所不能提供的。
+
+`Redis`的`Set`是`String`类型的无序集合。它底层其实是一个`value`为`null`的哈希表，所以添加删除和查找的复杂度都是`O(1)`。
+
+`Set`常用命令：
+
+> `sadd [key] [value1] [value2] [value3]...`：将一个或者多个`member`元素加入到集合`key`中，如果已经存在的`member`元素将被忽略
+>
+> `smembers [key]`：取出该集合的所有值
+>
+> `sismember [key] [value]`：判断集合`key`是否含有该`value`值，有的话为`1`，没有则为`0`
+>
+> `scard [key]`：返回该集合的元素个数
+>
+> `srem [key] [value1] [value2] [value3]...`：删除集合中的某个或某些元素
+>
+> `spop [key]`：随机从该集合中吐出一个值，会从集合中删除
+>
+> `srandmemeber [key] [n]`：随机从该集合中取出`n`个值，不会从集合中删除
+>
+> `smove [source] [desitination] [value]`：把集合中一个值移动到另外一个集合中
+>
+> `sinter [key1] [key2]`：返回两个集合的交集元素
+>
+> `sunion [key1] [key2]`：返回两个集合的并集元素
+>
+> `sdiff [key1] [key2]`：返回两个集合的差集元素[包含`key1`的但是不包含`key2`的]
+
+**<font color="red">关于`Set`列表在`Redis`中的数据结构：</font>**
+
+> `Set`数据结构是`dict`字典，字典是用哈希表实现的。
+>
+> `Java`中`HashSet`的内部实现使用的是`HashMap`，只不过所有的`value`都指向同一个对象。`Redis`的`set`结构也是一样，它的内部也使用`hash`结构，所有的`value`都指向同一个内部值。
