@@ -276,3 +276,289 @@
 >
 > 1. `Hash`，`field`为`value`，`value`为`score`
 > 2. 跳跃表，跳跃表的目的在于给元素`value`进行排序，根据`score`的范围获取元素列表，跳跃表可以好好去研究下，非常有意思
+
+## 4. `Redis`配置文件
+
+1. `###Units 单位###`
+
+   > 配置大小单位，开头定义了一些基本的度量单位，只支持`bytes`不支持`bit`，大小写不敏感
+   >
+   > `Note on units: when memory size is needed, it is possible to specify`：当需要内存大小时，可以指定
+   > `it in the usual form of 1k 5GB 4M and so forth`：通常使用`1k 5GB 4M`这种方式
+   > `units are case insensitive so 1GB 1Gb 1gB are all the same.`：单位不区分大小写，因此`1GB 1Gb 1gB`都是相同的
+
+2. `###INCLUDES 包含###`
+
+   > ```xml
+   > Include one or more other config files here.  This is useful if you have a standard template that goes to all Redis servers but also need to customize a few per-server settings.  Include files can include other files, so use this wisely.
+   > 在这里可以包含一个或者多个文件。如果这个对你有用的话，我们给所有的 Redis 服务器提供了一个标准的模板但是需要额外做一些自定义的服务器配置。包含的文件可以包含其它文件所以需要谨慎使用。
+   > 
+   > Notice option "include" won't be rewritten by command "CONFIG REWRITE" from admin or Redis Sentinel. Since Redis always uses the last processed line as value of a configuration directive, you'd better put includes at the beginning of this file to avoid overwriting config change at runtime.
+   > 注意 include 配置不能被 admin 或者 Redis 哨兵重写，因为 Redis 通常使用的是最后解析的配置行为作为配置指令的值。你最好在这个文件的开头配置 include 来避免它在运行时重写配置
+   > 
+   > If instead you are interested in using includes to override configuration options, it is better to use include as the last line.
+   > 如果相反你正好有兴趣使用 includes 去覆盖原来的配置，你最好是在配置文件的最后一行使用 include
+   > 
+   > 例如：
+   > include .\path\to\local.conf
+   > include c:\path\to\other.conf
+   > ```
+
+3. `###GENERAL 通用###`
+
+   > ```xml
+   > # On Windows, daemonize and pidfile are not supported.
+   > # However, you can run redis as a Windows service, and specify a logfile.
+   > # The logfile will contain the pid. 
+   > 在 Windows 中是不支持守护进程和 pidfile 的设置的，然而你仍然可以运行一个 windows 端的 Redis 服务并指定一个日志文件，该日志文件将包含 pid
+   > daemonize 其实就是守护进程也就是让 Redis 服务器后台启动
+   > pidfile 表示存放 pid 文件的位置，每个实例会产生一个不同的 pid 文件
+   > 
+   > # Accept connections on the specified port, default is 6379.
+   > # If port 0 is specified Redis will not listen on a TCP socket.
+   > 接受指定的端口进行连接，Redis 默认端口为 6379。如果指定的端口为 0 则 Redis 将不会监听 TCP 套接字。
+   > port 6379
+   > 
+   > # TCP listen() backlog.
+   > #
+   > # In high requests-per-second environments you need an high backlog in order
+   > # to avoid slow clients connections issues. Note that the Linux kernel
+   > # will silently truncate it to the value of /proc/sys/net/core/somaxconn so
+   > # make sure to raise both the value of somaxconn and tcp_max_syn_backlog
+   > # in order to get the desired effect.
+   > 在每秒请求数量较高的环境中，为了确保避免客户端连接缓慢的问题，需要大量的 backlog。请注意 Linux 内核会默默地将其截断为 /proc/sys/net/core/somaxconn 的值，因此要确保提高 somaxconn 和 tcp_max_syn_backlog 的值以获得所需的效果 
+   > tcp-backlog 511
+   > 注意：tcp-backlog 其实是一个连接队列，backlog 队列总和 = 未完成三次握手队列 + 已经完成三次握手队列
+   > 
+   > # By default Redis listens for connections from all the network interfaces
+   > # available on the server. It is possible to listen to just one or multiple
+   > # interfaces using the "bind" configuration directive, followed by one or
+   > # more IP addresses.
+   > 默认情况下 Redis 侦听来自服务器上所有可用的网络接口的连接。使用 bind 配置指令可以监听一个或者多个接口，后跟一个或者多个 IP 地址
+   > #
+   > # Examples:
+   > 例如：
+   > #
+   > # bind 192.168.1.100 10.0.0.1
+   > # bind 127.0.0.1
+   > 
+   > 
+   > # Specify the path for the Unix socket that will be used to listen for
+   > # incoming connections. There is no default, so Redis will not listen
+   > # on a unix socket when not specified.
+   > 指定用于侦听传入连接的 Unix 套接字的路径，unixsocket 是没有默认值的，所以 Redis 在没有明确指定 unixsocket 配置指令时是不会侦听 unis 套接字的
+   > #
+   > # unixsocket /tmp/redis.sock
+   > # unixsocketperm 700
+   > 
+   > # Close the connection after a client is idle for N seconds (0 to disable)
+   > 客户端空闲 N 秒之后关闭连接（0 表示禁用，也就是除非手动或者意外关闭否则一直处于连接状态）
+   > timeout 0
+   > 
+   > # TCP keepalive.
+   > TCP 心跳检测
+   > #
+   > # If non-zero, use SO_KEEPALIVE to send TCP ACKs to clients in absence
+   > # of communication. This is useful for two reasons:
+   > 如果非零，则在没有通信的情况下发送 SO_KEEPALIVE 向客户端发送 TCP ACKs 将非常有用，原因有两个：
+   > #
+   > # 1) Detect dead peers.
+   > 1） 检测死节点
+   > # 2) Take the connection alive from the point of view of network
+   > #    equipment in the middle.
+   > 2） 从中间网络设备的视角来看，这样做可以使连接处于活动状态
+   > #
+   > # On Linux, the specified value (in seconds) is the period used to send ACKs.
+   > # Note that to close the connection the double of the time is needed.
+   > # On other kernels the period depends on the kernel configuration.
+   > 在 Linux 上，发送 ACKs 的周期需要明确指定，注意：关闭连接时需要双倍的时间去关闭。在另外的内核上心跳检测的周期取决于内核的配置。
+   > #
+   > # A reasonable value for this option is 60 seconds.
+   > 心跳检测周期的值合理设置为 60 秒
+   > tcp-keepalive 0
+   > 
+   > # Specify the server verbosity level.
+   > # This can be one of:
+   > # debug (a lot of information, useful for development/testing)
+   > # verbose (many rarely useful info, but not a mess like the debug level)
+   > # notice (moderately verbose, what you want in production probably)
+   > # warning (only very important / critical messages are logged)
+   > 指定服务器的详细级别。详细级别可以是以下之一：
+   > debug（大量信息，常用于开发/测试环境）
+   > verbose（少有有用的信息，但是不想 debug 级别那样混乱）
+   > notice（适度冗长，可能是想在生产环境中才使用的级别，默认是 notice 警告级别）
+   > warning（该级别下，只有一些非常重要或者关键的信息被记录）
+   > loglevel notice
+   > 
+   > # Specify the log file name. Also 'stdout' can be used to force
+   > # Redis to log on the standard output. 
+   > 指定日志文件名。stdout 也可以用于强制 Redis 登录标准输出。
+   > logfile ""
+   > 
+   > # To enable logging to the Windows EventLog, just set 'syslog-enabled' to 
+   > # yes, and optionally update the other syslog parameters to suit your needs.
+   > # If Redis is installed and launched as a Windows Service, this will 
+   > # automatically be enabled.
+   > 要想使用Windows EventLog只需要将 syslog-enabled 设置为 yes，并可以选择更新其它适合你所需要的的 syslog 参数，如果 Redis 作为 Windows Service 来安装并启动，将默认自动启动【也就是说在 Linux 系统日志记录默认是关闭的】
+   > # syslog-enabled no
+   > 
+   > # Specify the source name of the events in the Windows Application log.
+   > 在 Windows 应用程序日志中指定时间的源
+   > # syslog-ident redis
+   > 
+   > # Set the number of databases. The default database is DB 0, you can select
+   > # a different one on a per-connection basis using SELECT <dbid> where
+   > # dbid is a number between 0 and 'databases'-1
+   > 设置数据库的数量。默认选择数据库是 0 号数据库，你可以使用 SELECT <dbid> 命令选择一个不同的数据库，dbid 中的数字在 0 到（数据库的数量 - 1）【跟数组一样，下标从 0 开始】
+   > databases 16
+   >     
+   > 这里应该还有个 protected-mode 保护模式，默认是开启的，如果想远程访问 Redis 需要将其设置为 no 关闭保护模式
+   > ```
+
+4. `###SECURITY 安全###`
+
+   > ```xml
+   > # Require clients to issue AUTH <PASSWORD> before processing any other
+   > # commands.  This might be useful in environments in which you do not trust
+   > # others with access to the host running redis-server.
+   > 该配置可以让客户端在执行其它命令之前需要客户端用密码做一个身份认证。该配置可能在你对不信任的极其中需要连接 Redis 服务器时有用。
+   > #
+   > # This should stay commented out for backward compatibility and because most
+   > # people do not need auth (e.g. they run their own servers).
+   > 为了向后兼容这里将安全认证做了注释也就是默认不适用，因为大多数人不需要身份认证（例如：他们运行他们自己的服务器）
+   > # 
+   > # Warning: since Redis is pretty fast an outside user can try up to
+   > # 150k passwords per second against a good box. This means that you should
+   > # use a very strong password otherwise it will be very easy to break.
+   > 警告：由于 Redis 服务器运行的速度非常快，所以外部用户可以使用每秒 15 万个密码去尝试暴力破解你的服务器密码。这意味着你应该使用一个非常健壮的密码否则将很容易被攻破。
+   > 
+   > 设置密码在这里设置：
+   > # requirepass foobared
+   > 【设置密码也可以通过命令设置，但是这种设置时暂时的，永久设置还是得在配置文件中设置：config get requirepass, config set requirepass "123456",此时再使用 config get requirepass 则需要你做一个身份认证】
+   > 
+   > # Command renaming.
+   > 命令重命名
+   > #
+   > # It is possible to change the name of dangerous commands in a shared
+   > # environment. For instance the CONFIG command may be renamed into something
+   > # hard to guess so that it will still be available for internal-use tools
+   > # but not available for general clients.
+   > 在共享环境中有可能改变一些重要的命令，这是非常危险的。例如：CONFIG 命令被重命名成了难以猜测的名字，虽然这仍然可以被当作内部工具使用，但是不适用于普通用户
+   > #
+   > # Example:
+   > 例如：
+   > # rename-command CONFIG b840fc02d524045429941cc15f59e41cb7be6c52
+   > 重命名 CONFIG 为 b840fc02d524045429941cc15f59e41cb7be6c52
+   > #
+   > # It is also possible to completely kill a command by renaming it into
+   > # an empty string:
+   > 当然，你也可以通过将命令重置为空字符串来完全终止命令
+   > #
+   > # rename-command CONFIG ""
+   > #
+   > # Please note that changing the name of commands that are logged into the
+   > # AOF file or transmitted to slaves may cause problems.
+   > 请注意，更改命令的名称登录到 AOF 文件或者传输到 从服务器 都可能出现问题
+   > ```
+
+5. `###LIMIT 设置###`
+
+   > ```xml
+   > # Set the max number of connected clients at the same time. By default
+   > # this limit is set to 10000 clients, however if the Redis server is not
+   > # able to configure the process file limit to allow for the specified limit
+   > # the max number of allowed clients is set to the current file limit
+   > # minus 32 (as Redis reserves a few file descriptors for internal uses).
+   > 设置允许同时访问的最大连接数。默认设置的最大连接数为 10000，然后 Redis 是无法做到让设置上的那样的数量去连接服务器，允许的最大客户端数量为当前文件限制减 32 ，因为 Redis 保留了一些文件描述符供内部使用
+   > #
+   > # Once the limit is reached Redis will close all the new connections sending
+   > # an error 'max number of clients reached'.
+   > 一旦达到限制，Redis 将关闭所有新连接，发送错误“达到最大客户端数”
+   > #
+   > # maxclients 10000
+   > 
+   > # Don't use more memory than the specified amount of bytes.
+   > # When the memory limit is reached Redis will try to remove keys
+   > # according to the eviction policy selected (see maxmemory-policy).
+   > 不要使用超过指定字节数的内存。当达到内存限制的时候，Redis 将尝试删除键，根据选择的驱逐策略
+   > #
+   > # If Redis can't remove keys according to the policy, or if the policy is
+   > # set to 'noeviction', Redis will start to reply with errors to commands
+   > # that would use more memory, like SET, LPUSH, and so on, and will continue
+   > # to reply to read-only commands like GET.
+   > 如果 Redis 不能根据策略删除键，或者如果策略设置为'noeviction'，Redis 将开始以错误回复命令 会使用更多内存的命令，例如SET、LPUSH 等，并将继续回复只读命令，如 GET。
+   > #
+   > # This option is usually useful when using Redis as an LRU cache, or to set
+   > # a hard memory limit for an instance (using the 'noeviction' policy).
+   > 当使用 Redis 作为 LRU 缓存或设置实例的硬内存限制（使用“noeviction”策略）时，此选项通常很有用。
+   > #
+   > # WARNING: If you have slaves attached to an instance with maxmemory on,
+   > # the size of the output buffers needed to feed the slaves are subtracted
+   > # from the used memory count, so that network problems / resyncs will
+   > # not trigger a loop where keys are evicted, and in turn the output
+   > # buffer of slaves is full with DELs of keys evicted triggering the deletion
+   > # of more keys, and so forth until the database is completely emptied.
+   > 警告：如果您将从属连接到启用了 maxmemory 的实例，则从使用的内存计数中减去提供从属所需的输出缓冲区的大小，因此网络问题/重新同步将不会触发密钥所在的循环驱逐，然后输出从属的缓冲区已满，删除的键的 DEL 触发删除更多的键，依此类推，直到数据库完全清空。
+   > #
+   > # In short... if you have slaves attached it is suggested that you set a lower
+   > # limit for maxmemory so that there is some free RAM on the system for slave
+   > # output buffers (but this is not needed if the policy is 'noeviction').
+   > #
+   > # WARNING: not setting maxmemory will cause Redis to terminate with an
+   > # out-of-memory exception if the heap limit is reached.
+   > 警告：如果达到堆限制，不设置 maxmemory 将导致 Redis 以 out-of-memory 异常终止。
+   > #
+   > # NOTE: since Redis uses the system paging file to allocate the heap memory,
+   > # the Working Set memory usage showed by the Windows Task Manager or by other
+   > # tools such as ProcessExplorer will not always be accurate. For example, right
+   > # after a background save of the RDB or the AOF files, the working set value
+   > # may drop significantly. In order to check the correct amount of memory used
+   > # by the redis-server to store the data, use the INFO client command. The INFO
+   > # command shows only the memory used to store the redis data, not the extra
+   > # memory used by the Windows process for its own requirements. Th3 extra amount
+   > # of memory not reported by the INFO command can be calculated subtracting the
+   > # Peak Working Set reported by the Windows Task Manager and the used_memory_peak
+   > # reported by the INFO command.
+   > 注意：由于 Redis 使用系统分页文件来分配堆内存，Windows 任务管理器或其他工具（如 ProcessExplorer）显示的工作集内存使用情况并不总是准确的。例如，在后台保存 RDB 或 AOF 文件后，工作集值可能会显着下降。为了检查 redis-server 用于存储数据的正确内存量，请使用 INFO 客户端命令。 INFO 命令仅显示用于存储 redis 数据的内存，而不是 Windows 进程出于自身需求而使用的额外内存。可以通过减去 Windows 任务管理器报告的 Peak Working Set 和 INFO 命令报告的 used_memory_peak 来计算未报告 INFO 命令的额外内存量。
+   > #
+   > # maxmemory <bytes>
+   > 
+   > # MAXMEMORY POLICY: how Redis will select what to remove when maxmemory
+   > # is reached. You can select among five behaviors:
+   > # 
+   > # volatile-lru -> remove the key with an expire set using an LRU algorithm
+   > # allkeys-lru -> remove any key according to the LRU algorithm
+   > # volatile-random -> remove a random key with an expire set
+   > # allkeys-random -> remove a random key, any key
+   > # volatile-ttl -> remove the key with the nearest expire time (minor TTL)
+   > # noeviction -> don't expire at all, just return an error on write operations
+   > volatile-lru：使用LRU算法移除key，只对设置了过期时间的键；（最近最少使用）
+   > allkeys-lru：在所有集合key中，使用LRU算法移除key
+   > volatile-random：在过期集合中移除随机的key，只对设置了过期时间的键
+   > allkeys-random：在所有集合key中，移除随机的key
+   > volatile-ttl：移除那些TTL值最小的key，即那些最近要过期的key
+   > noeviction：不进行移除。针对写操作，只是返回错误信息
+   > 
+   > # Note: with any of the above policies, Redis will return an error on write
+   > #       operations, when there are no suitable keys for eviction.
+   > #
+   > #       At the date of writing these commands are: set setnx setex append
+   > #       incr decr rpush lpush rpushx lpushx linsert lset rpoplpush sadd
+   > #       sinter sinterstore sunion sunionstore sdiff sdiffstore zadd zincrby
+   > #       zunionstore zinterstore hset hsetnx hmset hincrby incrby decrby
+   > #       getset mset msetnx exec sort
+   > #
+   > # The default is:
+   > #
+   > # maxmemory-policy noeviction
+   > 
+   > # LRU and minimal TTL algorithms are not precise algorithms but approximated
+   > # algorithms (in order to save memory), so you can select as well the sample
+   > # size to check. For instance for default Redis will check three keys and
+   > # pick the one that was used less recently, you can change the sample size
+   > # using the following configuration directive.
+   > 设置样本数量，LRU算法和最小TTL算法都并非是精确的算法，而是估算值，所以你可以设置样本的大小，redis默认会检查这么多个key并选择其中LRU的那个。
+   > 一般设置3到7的数字，数值越小样本越不准确，但性能消耗越小。
+   > 
+   > # maxmemory-samples 3
+   > ```
