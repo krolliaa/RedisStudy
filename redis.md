@@ -75,7 +75,7 @@
 >
 > - `flushall`：清空全部数据
 
-# 3. 常用五大数据类型
+## 3. 常用五大数据类型
 
 ### 3.1 `Redis`键`(key)`
 
@@ -411,7 +411,7 @@
    > # dbid is a number between 0 and 'databases'-1
    > 设置数据库的数量。默认选择数据库是 0 号数据库，你可以使用 SELECT <dbid> 命令选择一个不同的数据库，dbid 中的数字在 0 到（数据库的数量 - 1）【跟数组一样，下标从 0 开始】
    > databases 16
-   >     
+   > 
    > 这里应该还有个 protected-mode 保护模式，默认是开启的，如果想远程访问 Redis 需要将其设置为 no 关闭保护模式
    > ```
 
@@ -562,3 +562,21 @@
    > 
    > # maxmemory-samples 3
    > ```
+
+## 5. `Redis`的发布和订阅
+
+什么是发布订阅？`Redis`发布订阅`pub/sub`是一种消息通信模式：发送者`pub`发送消息，订阅者`sub`接收消息，`Redis`客户端可以订阅任意数量的频道。
+
+1. 客户端可以订阅频道如下图：
+
+   ![](https://img-blog.csdnimg.cn/802251179d704e8e8ce17dc36a20dd8a.png)
+
+2. 当给这个频道发布消息后，消息就会发送给订阅的客户端：
+
+   ![](https://img-blog.csdnimg.cn/a0e9c97480d04424acca3f4b7ee755a5.png)
+
+流程如下：
+
+> 1. 打开一个客户端订阅`channel1 ---> subscribe channel1`
+> 2. 打开另外一个客户端，给`channel1`发布消息`hello ---> publish channel1 hello ---> 返回订阅者数量`
+> 3. 打开第一个客户端可以看到发送的消息
