@@ -693,3 +693,43 @@
 > - `pfcount [key] [key...]`计算`HyperLogLog`的近似基数，可以计算多个，比如用`HyperLogLog`存储每天的独立访客数，计算一周的独立访客数`UV`可以使用`7`天的独立访客数进行合并计算。例如：`pfadd hll2 "redis" --- pfadd hll2 "mongodb" --- pfcount hll1 hll2 ---> 3`
 >
 > - `pfmerge [destkey] [sourcekey] [sourcekey...]`：将一个或者多个`HyperLogLog`合并之后的结果存储在另外一个`HyperLogLog`中，比如每月活跃用户可以使用每天的活跃用户来合并计算。例如：`pfmerge hll3 hll1 hll2`
+
+### 6.3 `Geospatial`
+
+`Redis 3.2`开始增加了对`GEO`类型的支持。`GEO Geographic`，地理信息的缩写，该类型就是元素的二维坐标，在地图上就是经纬度。`Redis`基于该类型，提供了经纬度设置，查询，范围查询、距离查询、经纬度`Hash`等常见操作。
+
+`Geopatial`常见命令：
+
+> - `geoadd [key] [longtiude] [latitude] [member] [longtitude latitude member..]`：添加地理位置（经度、纬度、名称）
+>
+>   `geoadd china:city 114.05 22.52 shenzhen 116.38 39.90 beijing 121.47 31.23 shanghai 106.50 29.53 chongqing `
+>
+>   两极无法直接添加，一般会下载城市数据，直接通过`Java`程序一次性导入。
+>
+>   有效的经度从`-180`度到`180`度。有效的纬度从`-85.05112878`度到`85.05112878`度。
+>
+>   当坐标位置超出指定范围时，该命令将会返回一个错误。
+>
+>   已经添加的数据，是无法再次往里面添加的。
+>
+> - `geopos [key] [member] [member...]`：获得指定地区的坐标值
+>
+>   `geopos china:city shanghai`
+>
+> - `geodist [key] [member1] [member2]`：获取两个位置之间的直线距离
+>
+>   `geodist china:city beijing shanghai km`
+>
+>   单位：
+>
+>   `m`表示单位为米[默认值]。
+>
+>   `km`表示单位为千米。
+>
+>   `mi`表示单位为英里。
+>
+>   `ft`表示单位为英尺。
+>
+>   如果用户没有显式地指定单位参数， 那么`GEODIST`默认使用米作为单位
+>
+> - `georadius [key] [longtitude] [latitude] radius m|km|ft|mi`：以给定的经纬度为中心，找出某一径内的元素`georadius china:city 110 30 1000 km`
