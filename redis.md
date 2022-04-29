@@ -667,3 +667,29 @@
 | --------- | -------------------- | ---------------- | --------------------------- |
 | 集合类型  | `64bit`              | `100000`         | `64bit * 100000 = 800KB`    |
 | `Bitmaps` | `1bit`               | `100000000`      | `1bit * 100000000 = 12.5MB` |
+
+### 6.2 `HyperLogLog`
+
+在工作当中，经常会遇到与统计相关的功能需求，比如统计网站`PV(PageView 页面访问量)`，可以使用`Redis`的`incr incrby`轻松实现。但是像`UV(UniqueVisitor 独立访客)`、独立`IP`数、搜索记录数等需要去重和计数的问题如何解决？这种求集合中不重复元素个数的问题称为基数问题。
+
+解决基数问题有很多种解决方案：
+
+1. 数据存储在`MySQL`表中，使用`distinct count`计算不重复个数
+2. 使用`Redis`提供的`hash set bitmaps`等数据结构来处理
+
+以上的方案结果精确，但随着数据不断增加，导致占用空间会越来越大，对于非常大的数据集是不切实际的。有什么方案可以平衡存储空间吗？通过降低一定的精度？
+
+`Redis`推出了`HyperLogLog`通过降低一定的精度平衡存储空间。`Redis HyperLogLog`是用来做技术统计的算法，其优点是：在输入元素的数量或者体积非常非常大的时候，计算基数所需的空间总是很小的、固定的。
+
+在`Redis`里面，每个`HyperLogLog`键只需要花费`12KB`内存就可以计算将近`2^64`个不同元素的基数。这和计算基数时，元素越多耗费内存就越多的集合形成鲜明对比。
+
+但是`HyperLogLog`由于只会根据输入元素来计算基数，而不会存储输入元素本身，所以`HyperLogLog`不能像集合那样返回输入的各个元素。
+
+那么到底什么是基数？比如数据集：`{1, 3, 5, 7, 5, 7, 8}`那么这个数据集的基数集为：`{1, 3, 5, 7, 8}`，基数，也就是不重复元素的个数为`5`。基数估计就是在误差可接受的范围内，快速计算基数。
+`HyperLogLog`常用命令：
+
+> - `pfadd [key] [element] [element...]`：添加指定元素到`HyperLogLog`中，例如：`pfadd hyperloglog1 "redis" --- pfadd hyperloglog1 "mysql" pfadd hyperloglog1 "redis"` ---> 将所有的元素添加到指定`HyperLogLog`新数据结构中，如果执行命令之后`HyperLogLog`估计的近似基数发生了变化，则返回`1`否则返回`0`
+>
+> - `pfcount [key] [key...]`计算`HyperLogLog`的近似基数，可以计算多个，比如用`HyperLogLog`存储每天的独立访客数，计算一周的独立访客数`UV`可以使用`7`天的独立访客数进行合并计算。例如：`pfadd hll2 "redis" --- pfadd hll2 "mongodb" --- pfcount hll1 hll2 ---> 3`
+>
+> - `pfmerge [destkey] [sourcekey] [sourcekey...]`：将一个或者多个`HyperLogLog`合并之后的结果存储在另外一个`HyperLogLog`中，比如每月活跃用户可以使用每天的活跃用户来合并计算。例如：`pfmerge hll3 hll1 hll2`
