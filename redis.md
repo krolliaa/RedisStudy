@@ -733,3 +733,184 @@
 >   如果用户没有显式地指定单位参数， 那么`GEODIST`默认使用米作为单位
 >
 > - `georadius [key] [longtitude] [latitude] radius m|km|ft|mi`：以给定的经纬度为中心，找出某一径内的元素`georadius china:city 110 30 1000 km`
+
+## 7. `Jedis`
+
+> 引入依赖：
+>
+> ```xml
+> <dependency>
+> 	<groupId>redis.clients</groupId>
+> 	<artifactId>jedis</artifactId>
+> 	<version>3.2.0</version>
+> </dependency>
+> ```
+>
+> 如果是在`Linux`中运行的`Redis`需要注意的事情：
+>
+> - 禁用`Linux`的防火墙，以`CentOS7`为例，执行的命令为：`systemctl stop/disable firewalld.service`，`redis.conf`中注释掉`bind 127.0.0.1`，然后`protected-mode on`
+
+初步使用程序如下：
+
+```java
+import redis.clients.jedis.Jedis;
+
+public class JedisTest {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.0.0.155", 6379);
+        String pong = jedis.ping();
+        System.out.println("连接成功 >>> " + pong);
+        jedis.close();
+    }
+}
+```
+
+`Jedis-API`测试程序 --- `Key`：
+
+```java
+import redis.clients.jedis.Jedis;
+
+import java.util.Set;
+
+public class JedisTest {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.0.0.155", 6379);
+        //Key 测试
+        jedis.flushDB();
+        jedis.set("k1", "v1");
+        jedis.set("k2", "v2");
+        jedis.set("k3", "v3");
+        Set<String> keys = jedis.keys("*");
+        for (String key : keys) System.out.println("key >>> " + key);
+        System.out.println("jedis-exists >>> " + jedis.exists("k1"));
+        System.out.println("jedis-ttl >>> " + jedis.ttl("k1"));
+        System.out.println("jedis-get >>> " + jedis.get("k1"));
+        jedis.close();
+    }
+}
+```
+
+`Jedis-API`测试程序 --- `String`：
+
+```java
+import redis.clients.jedis.Jedis;
+
+public class JedisTest {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.0.0.155", 6379);
+        //String 测试
+        jedis.flushDB();
+        jedis.set("k1", "v1");
+        jedis.set("k2", "v2");
+        jedis.set("k3", "v3");
+        jedis.mset("str1", "v1", "str2", "v2", "str3", "v3");
+        System.out.println("jedis-get >>> " + jedis.get("k1"));
+        System.out.println("jedis-mget >>> " + jedis.mget("str1", "str2", "str3"));
+        jedis.close();
+    }
+}
+```
+
+`Jedis-API`测试程序 --- `List`：
+
+```java
+import redis.clients.jedis.Jedis;
+
+import java.util.List;
+
+public class JedisTest {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.0.0.155", 6379);
+        //List 测试
+        jedis.flushDB();
+        jedis.lpush("myList", "1", "2", "3", "4", "5", "6", "7", "8");
+        List<String> list = jedis.lrange("myList", 0, -1);
+        for (String element : list) System.out.println(element);
+        jedis.close();
+    }
+}
+```
+
+`Jedis-API`测试程序 --- `Set`：
+
+```java
+import redis.clients.jedis.Jedis;
+
+import java.util.Set;
+
+public class JedisTest {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.0.0.155", 6379);
+        //Set 测试
+        jedis.flushDB();
+        jedis.sadd("orders", "order01");
+        jedis.sadd("orders", "order02");
+        jedis.sadd("orders", "order03");
+        jedis.sadd("orders", "order04");
+        jedis.sadd("orders", "order05");
+        jedis.sadd("orders", "order06");
+        jedis.sadd("orders", "order07");
+        jedis.sadd("orders", "order08");
+        jedis.sadd("orders", "order09");
+        jedis.sadd("orders", "order10");
+        jedis.sadd("orders", "testOrder");
+        Set<String> orders = jedis.smembers("orders");
+        for (String order : orders) System.out.println("Set order >>> " + order);
+        jedis.srem("orders", "testOrder");
+		jedis.close();
+    }
+}
+```
+
+`Jedis-API`测试程序 --- `Hash`：
+
+```java
+import redis.clients.jedis.Jedis;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class JedisTest {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.0.0.155", 6379);
+        //Set 测试
+        jedis.flushDB();
+        jedis.hset("hash1", "username", "ZhangSan");
+        jedis.hset("hash1", "age", "18");
+        System.out.println(jedis.hget("hash1", "username"));
+        Map<String, String> map = new HashMap<>();
+        map.put("telPhone", "18888888888");
+        map.put("address", "ShenZhen");
+        map.put("email", "aaa@188.com");
+        jedis.hmset("hash2", map);
+        List<String> result = jedis.hmget("hash2", "telPhone", "address", "email");
+        for (String element : result) System.out.println(element);
+        jedis.close();
+    }
+}
+```
+
+`Jedis-API`测试程序 --- `ZSet`：
+
+```java
+import redis.clients.jedis.Jedis;
+
+import java.util.Set;
+
+public class JedisTest {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.0.0.155", 6379);
+        //ZSet 测试
+        jedis.flushDB();
+        jedis.zadd("zSet01", 100d, "z3");
+        jedis.zadd("zSet01", 90d, "l4");
+        jedis.zadd("zSet01", 80d, "w5");
+        jedis.zadd("zSet01", 70d, "z6");
+        jedis.zadd("zSet01", 60d, "z7");
+        Set<String> zRange = jedis.zrange("zSet01", 0, -1);
+        for (String element : zRange) System.out.println(element);
+        jedis.close();
+    }
+}
+```
