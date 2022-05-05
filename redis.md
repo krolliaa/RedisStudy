@@ -914,3 +914,124 @@ public class JedisTest {
     }
 }
 ```
+
+### 7.1 手机验证码
+
+1. 完成一个手机验证码功能，要求：
+   - 输入手机号码，点击发送后随机生成`6`位数字码，`2`分钟有效
+   
+     ```java
+     //获取随机验证码
+     public static String getCode() {
+         Random random = new Random();
+         String code = "";
+         for (int i = 0; i < 6; i++) {
+             int rand = random.nextInt(10);
+             code += rand;
+         }
+         return code;
+     }
+     ```
+   
+   - 输入验证码，点击验证，返回成功或者失败
+   
+   - 每个手机号码每天只能输入三次
+   
+     ```java
+     //获取验证码：2分钟内有效 + 每个手机一天只有 3 次
+     public static void sendCode(String phone) {
+         String codeKey = "VerifyCode_" + phone + "_Code";
+         String countKey = "VerifyCode_" + phone + "_Count";
+         Jedis jedis = new Jedis("10.0.0.155", 6379);
+         String count = jedis.get(countKey);
+         if (count == null) {
+             //设置过期时间 ---> 1 天
+             jedis.setex(countKey, 24 * 60 * 60, "1");
+         } else if (Integer.parseInt(count) <= 2) {
+             //小于 3 次可以发送验证码
+             jedis.incr(countKey);
+         } else if (Integer.parseInt(count) > 2) {
+             //大于 2 次无法发送验证码
+             System.out.println("今日发送验证码已达 3 次！！！");
+             jedis.close();
+         }
+         String code = getCode();
+         jedis.setex(codeKey, 2 * 60, code);
+         jedis.close();
+     }
+     ```
+   
+     ```java
+     //验证验证码
+     public static void verifyCode(String phone, String code) {
+         Jedis jedis = new Jedis("10.0.0.155", 6379);
+         String codeKey = "VerifyCode_" + phone + "_Code";
+         String dbCode = jedis.get(codeKey);
+         if (dbCode != null && dbCode.equals(code)) {
+             System.out.println("验证通过！");
+         } else {
+             System.out.println("验证码错误！");
+         }
+     }
+     ```
+   
+   - 全部代码如下：
+   
+     ```java
+     import redis.clients.jedis.Jedis;
+     
+     import java.util.Random;
+     
+     public class JedisRandomTest {
+         public static void main(String[] args) {
+             verifyCode("13888888888", "504775");
+         }
+     
+         //创建随机验证码
+         public static String getCode() {
+             Random random = new Random();
+             String code = "";
+             for (int i = 0; i < 6; i++) {
+                 int rand = random.nextInt(10);
+                 code += rand;
+             }
+             return code;
+         }
+     
+         //【须符合条件】获取验证码：2分钟内有效 + 每个手机一天只有 3 次
+         public static String sendCode(String phone) {
+             String codeKey = "VerifyCode_" + phone + "_Code";
+             String countKey = "VerifyCode_" + phone + "_Count";
+             Jedis jedis = new Jedis("10.0.0.155", 6379);
+             String count = jedis.get(countKey);
+             if (count == null) {
+                 //设置过期时间 ---> 1 天
+                 jedis.setex(countKey, 24 * 60 * 60, "1");
+             } else if (Integer.parseInt(count) <= 2) {
+                 //小于 3 次可以发送验证码
+                 jedis.incr(countKey);
+             } else if (Integer.parseInt(count) > 2) {
+                 //大于 2 次无法发送验证码
+                 System.out.println("今日发送验证码已达 3 次！！！");
+                 jedis.close();
+                 return "今日发送验证码已达 3 次！！！";
+             }
+             String code = getCode();
+             jedis.setex(codeKey, 120, code);
+             jedis.close();
+             return code;
+         }
+     
+         //验证验证码
+         public static void verifyCode(String phone, String code) {
+             Jedis jedis = new Jedis("10.0.0.155", 6379);
+             String codeKey = "VerifyCode_" + phone + "_Code";
+             String dbCode = jedis.get(codeKey);
+             if (dbCode != null && dbCode.equals(code)) {
+                 System.out.println("验证通过！");
+             } else {
+                 System.out.println("验证码错误！");
+             }
+         }
+     }
+     ```
