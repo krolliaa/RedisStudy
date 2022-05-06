@@ -1035,3 +1035,127 @@ public class JedisTest {
          }
      }
      ```
+
+## 8. `Redis`与`SpringBoot`整合
+
+1. 在`pom.xml`文件中引入`redis`相关依赖
+
+   ```xml
+   <!-- redis -->
+   <dependency>
+   	<groupId>org.springframework.boot</groupId>
+   	<artifactId>spring-boot-starter-data-redis</artifactId>
+   </dependency>
+   
+   <!-- spring2.X集成redis所需common-pool2-->
+   <dependency>
+   	<groupId>org.apache.commons</groupId>
+   	<artifactId>commons-pool2</artifactId>
+   	<version>2.6.0</version>
+   </dependency>
+   ```
+
+2. `application.properties`配置`redis`配置
+
+   ```properties
+   spring.redis.host=10.0.0.155
+   # Redis使用的端口（默认就是 6379）
+   spring.redis.port=6379
+   # Redis使用的数据库索引（默认就是 0）
+   spring.redis.database=0
+   # 连接超时时间
+   spring.redis.timeout=1800000
+   # 连接池最大连接数（使用负值表示没有限制）
+   spring.redis.lettuce.pool.max-active=20
+   # 最大阻塞等待时间（使用负值表示没有限制）
+   spring.redis.lettuce.pool.max-wait=-1
+   # 连接池中最大的空闲连接
+   spring.redis.lettuce.pool.max-idle=5
+   # 连接池中最小的空闲连接
+   spring.redis.lettuce.pool.min-idle=0
+   
+   ```
+
+3. 添加`RedisTemplate`配置类
+
+   ```java
+   package com.example.demo;
+   
+   import com.fasterxml.jackson.annotation.JsonAutoDetect;
+   import com.fasterxml.jackson.annotation.PropertyAccessor;
+   import com.fasterxml.jackson.databind.ObjectMapper;
+   import org.springframework.cache.CacheManager;
+   import org.springframework.cache.annotation.CachingConfigurerSupport;
+   import org.springframework.cache.annotation.EnableCaching;
+   import org.springframework.context.annotation.Bean;
+   import org.springframework.context.annotation.Configuration;
+   import org.springframework.data.redis.cache.RedisCacheConfiguration;
+   import org.springframework.data.redis.cache.RedisCacheManager;
+   import org.springframework.data.redis.connection.RedisConnectionFactory;
+   import org.springframework.data.redis.core.RedisTemplate;
+   import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+   import org.springframework.data.redis.serializer.RedisSerializationContext;
+   import org.springframework.data.redis.serializer.RedisSerializer;
+   import org.springframework.data.redis.serializer.StringRedisSerializer;
+   
+   import java.time.Duration;
+   
+   @EnableCaching
+   @Configuration
+   public class RedisConfig extends CachingConfigurerSupport {
+       @Bean
+       public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+           RedisTemplate<String, Object> redisTemplate = new RedisTemplate<>();
+           RedisSerializer<String> redisSerializer = new StringRedisSerializer();
+           Jackson2JsonRedisSerializer jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer(Object.class);
+           ObjectMapper objectMapper = new ObjectMapper();
+           objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+           objectMapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
+           jackson2JsonRedisSerializer.setObjectMapper(objectMapper);
+           redisTemplate.setConnectionFactory(redisConnectionFactory);
+           redisTemplate.setKeySerializer(redisSerializer);
+           redisTemplate.setValueSerializer(jackson2JsonRedisSerializer);
+           redisTemplate.setHashValueSerializer(jackson2JsonRedisSerializer);
+           return redisTemplate;
+       }
+   
+       @Bean
+       public CacheManager cacheManager(RedisConnectionFactory redisConnectionFactory) {
+           RedisSerializer<String> redisSerializer = new StringRedisSerializer();
+           Jackson2JsonRedisSerializer jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer(Object.class);
+           ObjectMapper objectMapper = new ObjectMapper();
+           objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+           objectMapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
+           jackson2JsonRedisSerializer.setObjectMapper(objectMapper);
+           RedisCacheConfiguration redisCacheConfiguration = RedisCacheConfiguration.defaultCacheConfig().entryTtl(Duration.ofSeconds(600)).serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(redisSerializer)).serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(jackson2JsonRedisSerializer)).disableCachingNullValues();
+           RedisCacheManager cacheManager = RedisCacheManager.builder(redisConnectionFactory).cacheDefaults(redisCacheConfiguration).build();
+           return cacheManager;
+       }
+   }
+   ```
+
+4. 测试`RedisTemplate`
+
+   ```java
+   package com.example.demo;
+   
+   import org.springframework.beans.factory.annotation.Autowired;
+   import org.springframework.data.redis.core.RedisTemplate;
+   import org.springframework.web.bind.annotation.GetMapping;
+   import org.springframework.web.bind.annotation.RequestMapping;
+   import org.springframework.web.bind.annotation.RestController;
+   
+   @RestController
+   @RequestMapping(value = "/redis")
+   public class RedisControllerTest {
+       @Autowired
+       private RedisTemplate redisTemplate;
+   
+       @GetMapping(value = "/getKey")
+       public String testRedis() {
+           redisTemplate.opsForValue().set("name", "Lucky");
+           String name = (String) redisTemplate.opsForValue().get("name");
+           return name;
+       }
+   }
+   ```   
