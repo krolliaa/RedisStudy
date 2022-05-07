@@ -1158,4 +1158,603 @@ public class JedisTest {
            return name;
        }
    }
-   ```   
+   ```
+
+
+## 9. `Redis`事务_锁机制
+
+`All the commands in a transaction are seriallized and executed sequentiallu.It can never happen that a request issued by another client is served in the middle of the execution of a Redis transaction.This guarantees that the commands are executed as a single isolated operation.`
+
+在`Redis`中所有关于事务的命令都会序列化、按顺序地执行。事务在执行过程中，不会被其他客户端发送来的命令的请求所打断。`Redis`事务是一个单独的隔离操作。
+
+`Redis`事务【或者说事务都如此】的主要作用就是串联多个命令防止别的命令插队。
+
+关于`Redis`事务的命令主要有：`Multi Exec discard`
+
+从输入`Multi`命令开始，输入的命令都会依次进入命令队列中，但是不会执行，直到输入`Exec`之后，`Redis`会将之前的命令队列中的命令依次执行。
+
+组队的过程中可以通过`discard`来放弃组队。
+
+组队过程中如果发生错误则表示组队不成功，不欢而散。整个队列都会被取消，这就是事务的错误处理之组队过程的中发生的错误，也就是`multi`发生的错误。这个很好理解。
+
+如果执行阶段某个命令报出了错误，则只有报错的命令不会被执行，而其它的命令都会执行，不会回滚。而且只是错误的不会进行，后面的命令不被影响，举个例子：
+
+```powershell
+127.0.0.1:6379> flushAll
+OK
+127.0.0.1:6379> multi
+OK
+127.0.0.1:6379> set k1 v1
+QUEUED
+127.0.0.1:6379> set k2 v2
+QUEUED
+127.0.0.1:6379> incr k1
+QUEUED
+127.0.0.1:6379> set k3 v3
+QUEUED
+127.0.0.1:6379> set k4 v4
+QUEUED
+127.0.0.1:6379> exec
+1) OK
+2) OK
+3) (error) ERR value is not an integer or out of range
+4) OK
+5) OK
+```
+
+
+
+![](https://img-blog.csdnimg.cn/c51d3086b8bb44d395f483740e02a052.png)
+
+```powershell
+> redis-cli
+> flushAll
+> multi
+> set k1 v1
+> set k2 v2
+> set k3 v3
+> set k4 v4
+> exec
+```
+
+### 9.1 事务冲突
+
+想想一个场景：有很多人有你的账户,同时去参加双十一抢购，你的账户一共只有`10000`元，有一个人想买`8000`元商品，另外一个人想买5000元商品，还有一个想买1000元商品。这就会导致事务冲突的问题。导致最后的账户为：`-4000`事务冲突问题。
+
+![](https://img-blog.csdnimg.cn/f9545658da9c4fb984bd114cf0014e64.png)
+
+### 9.2 锁机制
+
+要想解决掉这个问题，需要用到锁机制：
+
+1. 悲观锁
+
+   > 顾名思义，就是很悲观，每次去拿数据的时候都认为别人会修改，所以每次拿数据的时候都会上锁，这样别人想拿这个数据就会`block`【也就是等待，阻塞态】，直到它拿到锁。传统的关系型数据库里边就用到了很多这种锁机制，比如：行锁，表锁，读锁，写锁等，都是在做操作之前先上锁。
+   >
+   > 这种方式的缺点就是效率低。
+   >
+   > ![](https://img-blog.csdnimg.cn/8a818c9fb59b4618a2be0bf7eb25833c.png)
+
+2. 乐观锁
+
+   > 说明下版本号机制，比如当前数据定义为是`v1.0`版本，想获取的都可以获取到，但是如果要修改数据的话肯定是有先后顺序的，先修改的会将版本更改，比如更改为：`v1.1`版本，后修改的会先检查`check-and-set`机制检查版本是否一致，如果版本不一致，会先将数据更改到`v1.1`版本的，然后再做改变，此时又做一次版本升级，最终的版本这里就是`v1.2`
+   >
+   > 顾名思义就是很乐观，每次去拿数据的时候都会认为别人不会修改，所以不会上锁，但是在更新数据的时候会判断一下在此期间别人有没有去更新这个数据，就可以使用上述所说的版本号机制。乐观锁适用于多读的应用类型也就是多人同时读这种情况，这样就可以提高吞吐量。`Redis`就是用的版本号机制，使用`check-and-set`机制实现事务。
+   >
+   > 乐观锁的应用场景很广泛，最经典的就是**抢票**。
+   >
+   > ![](https://img-blog.csdnimg.cn/9c95e32743474f4fbe46ab7ef7ab5838.png)
+
+### 9.3 `Redis`中使用乐观锁
+
+如何在`Redis`中使用锁机制 ---> 乐观锁：`watch [key...]`，在执行`multi`也就是开始事务之前，使用了`watch`，那么在事务执行当这个`key`的`value`被改动了则事务将被打断。
+
+如果想要取消对所有`key`的监视，可以使用`unwatch`，如果`exec/discard`命令先执行了的话就不需要取消监视使用`unwatch`了
+
+### 9.4 `Redis`事务三大特性
+
+- 单独的隔离操作
+  - 事务中的所有命令都会序列化按照顺序执行。事务在执行过程中，不会被其他的客户端发送来的命令请求所打断。
+- 没有隔离级别的概念
+  - 队列中的命令没有提交之前都不会实际被执行，因为事务提交前任何指令都不会被实际执行
+- 不保证原子性
+  - 事务中如果有一条命令执行失败，其后的命令仍然会被执行，没有回滚
+
+### 9.5 `Redis`事务秒杀案例
+
+#### 9.5.1 模拟秒杀操作【无并发】【第一版】
+
+1. 解决计数器和人员记录的事务操作 ---> 重点就是用户的`id`即`uid`还有商品`id`即`prodid`
+
+   > 商品库存：`sk:prodid:qt`
+   >
+   > 秒杀成功者清单：`sk:prodid:user`
+
+2. 做一个简单的页面，当用户点击时发送秒杀请求
+
+   ```jsp
+   <%@ page language="java" contentType="text/html; charset=UTF-8"
+            pageEncoding="UTF-8"%>
+   <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+   <html>
+   <head>
+       <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+       <title>Insert title here</title>
+   </head>
+   <body>
+   <h1>iPhone 100 Pro !!!  1元秒杀！！！
+   </h1>
+   
+   
+   <form id="msform" action="${pageContext.request.contextPath}/doseckill" enctype="application/x-www-form-urlencoded">
+       <input type="hidden" id="prodId" name="prodId" value="888">
+       <input type="button"  id="miaosha_btn" name="seckill_btn" value="秒杀点我"/>
+   </form>
+   
+   </body>
+   <%--<script  type="text/javascript" src="${pageContext.request.contextPath}/script/jquery/jquery-3.1.0.js"></script>--%>
+   <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+   <script  type="text/javascript">
+       $(function(){
+           $("#miaosha_btn").click(function(){
+               var url=$("#msform").attr("action");
+               $.post(url,$("#msform").serialize(),function(data){
+                   if(data=="false"){
+                       alert("抢光了" );
+                       $("#miaosha_btn").attr("disabled",true);
+                   }
+               } );
+           })
+       })
+   </script>
+   </html>
+   ```
+
+3. 创建`Servlet`处理用户发送的`post`请求
+
+   ```java
+   @Override
+   protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+       //这里是模拟，创建随机的 userId 即可
+       String userId = new Random().nextInt(5000) + ":";
+       //从前端获取商品 id
+       String prodId = req.getParameter("prodId");
+       //完成秒杀操作 ---> 返回一个布尔值表示是否秒杀成功
+       boolean isSuccess = secondKillRedis(userId, prodId);
+       resp.getWriter().print(isSuccess);
+   }
+   ```
+
+4. 秒杀处理
+
+   ```java
+   public boolean secondKillRedis(String userId, String prodId) {
+       //如果 userId 和 prodId 为null，直接返回 false
+       if (userId == null || prodId == null) return false;
+       Jedis jedis = new Jedis("10.0.0.155", 6379);
+       //用户是否秒杀成功
+       String userKey = "sk:" + prodId + ":user";
+       //剩余商品数量
+       String productCountKey = "sk:" + prodId + ":qt";
+       //查询有无该商品，使用 exists 判断是否存在，如果不存在表示秒杀活动尚未开始，如果存在则判断数量够不够，不够表示秒杀活动结束
+       if (!jedis.exists(productCountKey)) {
+           System.out.println("秒杀活动尚未开始！请耐心等待哦~");
+           jedis.close();
+           return false;
+       } else if (Integer.parseInt(jedis.get(productCountKey)) <= 0) {
+           //如果查到了该商品但是数量不够表示秒杀活动已经结束了
+           System.out.println("秒杀活动已经结束了哦~");
+           jedis.close();
+           return false;
+       } else if (jedis.sismember(userKey, userId)) {
+           //如果商品有，但是秒杀成功的名单上已经有该用户就无法继续进行秒杀了
+           System.out.println("您已经秒杀过了哦~");
+           jedis.close();
+           return false;
+       }
+       //参与秒杀
+       //商品数量减1
+       jedis.decr(productCountKey);
+       //用户加入秒杀成功的名单【防止添加重复人员，可以使用 sadd】
+       jedis.sadd(userKey, userId);
+       jedis.close();
+       System.out.println("恭喜你！秒杀成功！");
+       return true;
+   }
+   ```
+
+5. `web.xml`如下
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
+            version="4.0">
+       <servlet>
+           <servlet-name>sk</servlet-name>
+           <servlet-class>SecondKillServlet</servlet-class>
+       </servlet>
+       <servlet-mapping>
+           <servlet-name>sk</servlet-name>
+           <url-pattern>/doseckill</url-pattern>
+       </servlet-mapping>
+   </web-app>
+   ```
+
+6. `pom.xml`如下：
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   
+   <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+       <modelVersion>4.0.0</modelVersion>
+   
+       <groupId>org.example</groupId>
+       <artifactId>untitled1</artifactId>
+       <version>1.0-SNAPSHOT</version>
+       <packaging>war</packaging>
+   
+       <properties>
+           <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+           <maven.compiler.source>1.8</maven.compiler.source>
+           <maven.compiler.target>1.8</maven.compiler.target>
+       </properties>
+   
+       <dependencies>
+           <dependency>
+               <groupId>redis.clients</groupId>
+               <artifactId>jedis</artifactId>
+               <version>3.2.0</version>
+           </dependency>
+           <dependency>
+               <groupId>javax.servlet</groupId>
+               <artifactId>servlet-api</artifactId>
+               <version>2.5</version>
+           </dependency>
+           <dependency>
+               <groupId>junit</groupId>
+               <artifactId>junit</artifactId>
+               <version>4.11</version>
+               <scope>test</scope>
+           </dependency>
+       </dependencies>
+   
+       <build>
+           <resources>
+               <resource>
+                   <filtering>false</filtering>
+                   <includes>
+                       <include>**/*.properties</include>
+                       <include>**/*.xml</include>
+                   </includes>
+                   <directory>src/main/java</directory>
+               </resource>
+           </resources>
+       </build>
+   </project>
+   ```
+
+7. `redis`中设置：
+
+   ```powershell
+   127.0.0.1:6379> set sk:888:qt 10
+   OK
+   127.0.0.1:6379> get sk:888:qt
+   "10"
+   ```
+
+#### 9.5.2 模拟秒杀操作【有并发】
+
+使用`Linux`中的`ab`工具可以模拟并发测试，`Centos6`默认安装，`Centos7`需要手动安装
+
+- 安装：`yum install httpd-tools`
+
+- 没有网络时：
+  1. 进入`cd /run/media/root/CentOS 7 x86_64/Packages`（路径跟`Centos6`不同）
+  2. `apr-1.4.8-3.el7.x86_64.rpm`
+  3. `apr-util-1.5.2-6.el7.x86_64.rpm`
+  4. `httpd-tools-2.4.6-67.el7.centos.x86_64.rpm`
+
+- `vim postfile 模拟表单提交参数,以&符号结尾`
+
+- 存放当前目录，内容为：`prodid=0101&`
+
+- `ab -n 2000 -c 200 -k -p ~/postfile -T application/x-www-form-urlencoded http://10.0.0.155:8080/doseckill`
+
+可以看到`IDEA`后台中秒杀的数据，然后可以使用`smembers`查看秒杀成功的用户，但是如果秒杀的用户够大，就会产生超卖问题，本质就是之前提到的事务冲突问题。
+
+#### 9.5.3 解决超卖问题【乐观锁】【第二版】
+
+![](https://img-blog.csdnimg.cn/6707c181071a4756bb3d2edd4007b190.png)
+
+按照之前的学习，可以使用悲观锁或者乐观锁解决超卖的问题，但是悲观锁的效率比较低下，因此更建议使用乐观锁【版本号机制】来解决超卖的问题。
+
+![](https://img-blog.csdnimg.cn/13ef9c58c3b741bea34f722224872f2e.png)
+
+```java
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Transaction;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
+import java.util.Random;
+
+public class SecondKillServlet extends HttpServlet {
+    public SecondKillServlet() {
+        super();
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        //这里是模拟，创建随机的 userId 即可
+        String userId = new Random().nextInt(5000) + ":";
+        //从前端获取商品 id
+        String prodId = req.getParameter("prodId");
+        //完成秒杀操作 ---> 返回一个布尔值表示是否秒杀成功
+        boolean isSuccess = secondKillRedis(userId, prodId);
+        resp.getWriter().print(isSuccess);
+    }
+
+    public boolean secondKillRedis(String userId, String prodId) {
+        //如果 userId 和 prodId 为null，直接返回 false
+        if (userId == null || prodId == null) return false;
+        Jedis jedis = new Jedis("10.0.0.155", 6379);
+        //用户是否秒杀成功
+        String userKey = "sk:" + prodId + ":user";
+        //剩余商品数量
+        String productCountKey = "sk:" + prodId + ":qt";
+        jedis.watch(productCountKey);
+        //查询有无该商品，使用 exists 判断是否存在，如果不存在表示秒杀活动尚未开始，如果存在则判断数量够不够，不够表示秒杀活动结束
+        if (!jedis.exists(productCountKey)) {
+            System.out.println("秒杀活动尚未开始！请耐心等待哦~");
+            jedis.close();
+            return false;
+        } else if (Integer.parseInt(jedis.get(productCountKey)) <= 0) {
+            //如果查到了该商品但是数量不够表示秒杀活动已经结束了
+            System.out.println("秒杀活动已经结束了哦~");
+            jedis.close();
+            return false;
+        } else if (jedis.sismember(userKey, userId)) {
+            //如果商品有，但是秒杀成功的名单上已经有该用户就无法继续进行秒杀了
+            System.out.println("您已经秒杀过了哦~");
+            jedis.close();
+            return false;
+        }
+        //参与秒杀 ---> 添加事务
+        Transaction transaction = jedis.multi();
+        //商品数量减1
+        jedis.decr(productCountKey);
+        //用户加入秒杀成功的名单【防止添加重复人员，可以使用 sadd】
+        jedis.sadd(userKey, userId);
+        //执行事务
+        List<Object> result = transaction.exec();
+        //如果没有执行，result == null 或者 result.size() == 0 表示事务没有执行成功，此时声明商品被抢光了
+        if(result == null || result.size() == 0) {
+            System.out.println("商品被抢光啦！！！");
+            jedis.close();
+            return false;
+        }
+        jedis.close();
+        System.out.println("恭喜你！秒杀成功！");
+        return true;
+    }
+}
+```
+
+#### 9.5.4 秒光但仍有库存【连接池】【第三版】
+
+因为用的是乐观锁，所以会导致许多连接`Redis`的请求失败，先点的可能没有秒到但是后点的可能秒到了，所以需要使用到连接池来解决这个问题。
+
+使用连接池可以通过管理参数，节省每次连接`Redis`服务所带来的的消耗，可以把连接好的实例反复进行利用。常见参数如下：
+
+> `MaxTotal`：控制一个`pool`可分配多少个`jedis`实例，通过`pool.getResource()`来获取；如果赋值为`-1`，则表示不限制；如果`pool`已经分配了`MaxTotal`个`jedis`实例，则此时`pool`的状态为`exhausted`。【表示筋疲力尽的意思】
+>
+> `maxIdle`：控制一个`pool`最多有多少个状态为`idle`(空闲)的`jedis`实例；
+>
+> `MaxWaitMillis`：表示当`borrow`一个`jedis`实例时，最大的等待毫秒数，如果超过等待时间，则直接抛`JedisConnectionException`
+>
+> `testOnBorrow`：获得一个`jedis`实例的时候是否检查连接可用性`（ping()）`；如果为`true`，则得到的`jedis`实例均是可用的；
+
+打造`Jedis`连接池工具：
+
+```java
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
+
+public class JedisPoolUtil {
+
+    private static volatile JedisPool jedisPool = null;
+
+    public JedisPoolUtil() {
+    }
+
+    public static JedisPool getJedisPoolInstance() {
+        if (null == jedisPool) {
+            synchronized (JedisPool.class) {
+                JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
+                jedisPoolConfig.setMaxTotal(200);
+                jedisPoolConfig.setMaxIdle(32);
+                jedisPoolConfig.setMaxWaitMillis(100 * 1000);
+                jedisPoolConfig.setBlockWhenExhausted(true);
+                jedisPoolConfig.setTestOnBorrow(true);
+                jedisPool = new JedisPool(jedisPoolConfig, "10.0.0.155", 6379, 60000);
+            }
+        }
+        return jedisPool;
+    }
+
+    public static void release(JedisPool jedisPool, Jedis jedis) {
+        if (null != jedis) {
+            jedisPool.getResource();
+        }
+    }
+}
+```
+
+```java
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.Transaction;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
+import java.util.Random;
+
+public class SecondKillServlet extends HttpServlet {
+    public SecondKillServlet() {
+        super();
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        //这里是模拟，创建随机的 userId 即可
+        String userId = new Random().nextInt(5000) + ":";
+        //从前端获取商品 id
+        String prodId = req.getParameter("prodId");
+        //完成秒杀操作 ---> 返回一个布尔值表示是否秒杀成功
+        boolean isSuccess = secondKillRedis(userId, prodId);
+        resp.getWriter().print(isSuccess);
+    }
+
+    public boolean secondKillRedis(String userId, String prodId) {
+        //如果 userId 和 prodId 为null，直接返回 false
+        if (userId == null || prodId == null) return false;
+        JedisPool jedisPoolInstance = JedisPoolUtil.getJedisPoolInstance();
+        Jedis jedis =jedisPoolInstance.getResource();
+        //Jedis jedis = new Jedis("10.0.0.155", 6379);
+        //用户是否秒杀成功
+        String userKey = "sk:" + prodId + ":user";
+        //剩余商品数量
+        String productCountKey = "sk:" + prodId + ":qt";
+        jedis.watch(productCountKey);
+        //查询有无该商品，使用 exists 判断是否存在，如果不存在表示秒杀活动尚未开始，如果存在则判断数量够不够，不够表示秒杀活动结束
+        if (!jedis.exists(productCountKey)) {
+            System.out.println("秒杀活动尚未开始！请耐心等待哦~");
+            jedis.close();
+            return false;
+        } else if (Integer.parseInt(jedis.get(productCountKey)) <= 0) {
+            //如果查到了该商品但是数量不够表示秒杀活动已经结束了
+            System.out.println("秒杀活动已经结束了哦~");
+            jedis.close();
+            return false;
+        } else if (jedis.sismember(userKey, userId)) {
+            //如果商品有，但是秒杀成功的名单上已经有该用户就无法继续进行秒杀了
+            System.out.println("您已经秒杀过了哦~");
+            jedis.close();
+            return false;
+        }
+        //参与秒杀 ---> 添加事务
+        Transaction transaction = jedis.multi();
+        //商品数量减1
+        jedis.decr(productCountKey);
+        //用户加入秒杀成功的名单【防止添加重复人员，可以使用 sadd】
+        jedis.sadd(userKey, userId);
+        //执行事务
+        List<Object> result = transaction.exec();
+        //如果没有执行，result == null 或者 result.size() == 0 表示事务没有执行成功，此时声明商品被抢光了
+        if(result == null || result.size() == 0) {
+            System.out.println("商品被抢光啦！！！");
+            jedis.close();
+            return false;
+        }
+        jedis.close();
+        System.out.println("恭喜你！秒杀成功！");
+        return true;
+    }
+}
+```
+
+#### 9.5.5 库存遗留问题【`Lua`脚本】【第四版】
+
+`Redis 2.6`以上版本可以编写`Lua`脚本解决超卖问题
+
+```java
+package com.xiaoqiu;
+
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.core.joran.conditional.ElseAction;
+import redis.clients.jedis.HostAndPort;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisCluster;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
+import redis.clients.jedis.ShardedJedisPool;
+import redis.clients.jedis.Transaction;
+
+public class SecKill_redisByScript {
+	
+	private static final  org.slf4j.Logger logger =LoggerFactory.getLogger(SecKill_redisByScript.class) ;
+
+	public static void main(String[] args) {
+		JedisPool jedispool =  JedisPoolUtil.getJedisPoolInstance();
+ 
+		Jedis jedis=jedispool.getResource();
+		System.out.println(jedis.ping());
+		
+		Set<HostAndPort> set=new HashSet<HostAndPort>();
+		
+	}
+	
+	static String secKillScript ="local userid=KEYS[1];\r\n" + 
+			"local prodid=KEYS[2];\r\n" + 
+			"local qtkey='sk:'..prodid..\":qt\";\r\n" + 
+			"local usersKey='sk:'..prodid..\":usr\";\r\n" + 
+			"local userExists=redis.call(\"sismember\",usersKey,userid);\r\n" + 
+			"if tonumber(userExists)==1 then \r\n" + 
+			"   return 2;\r\n" + 
+			"end\r\n" + 
+			"local num= redis.call(\"get\" ,qtkey);\r\n" + 
+			"if tonumber(num)<=0 then \r\n" + 
+			"   return 0;\r\n" + 
+			"else \r\n" + 
+			"   redis.call(\"decr\",qtkey);\r\n" + 
+			"   redis.call(\"sadd\",usersKey,userid);\r\n" + 
+			"end\r\n" + 
+			"return 1" ;
+			 
+	static String secKillScript2 = 
+			"local userExists=redis.call(\"sismember\",\"{sk}:0101:usr\",userid);\r\n" +
+			" return 1";
+
+	public static boolean doSecKill(String uid,String prodid) throws IOException {
+
+		JedisPool jedispool =  JedisPoolUtil.getJedisPoolInstance();
+		Jedis jedis=jedispool.getResource();
+
+		 //String sha1=  .secKillScript;
+		String sha1=  jedis.scriptLoad(secKillScript);
+		Object result= jedis.evalsha(sha1, 2, uid,prodid);
+
+		  String reString=String.valueOf(result);
+		if ("0".equals( reString )  ) {
+			System.err.println("已抢空！！");
+		}else if("1".equals( reString )  )  {
+			System.out.println("抢购成功！！！！");
+		}else if("2".equals( reString )  )  {
+			System.err.println("该用户已抢过！！");
+		}else{
+			System.err.println("抢购异常！！");
+		}
+		jedis.close();
+		return true;
+	}
+}
+```
