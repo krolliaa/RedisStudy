@@ -1789,6 +1789,75 @@ public class SecKill_redisByScript {
 
 - 关于配置文件中`RDB`相关配置信息？
 
+  >- 使用`vim /usr/local/redis-7.0.0/redis.conf`打开配置文件，使用`?SNAPSHOTTING`搜索。
+  >
+  >  ![](https://img-blog.csdnimg.cn/784082c15416432eb91d9a27e2e73e1a.png)
+  >
+  >  在`3600s`中至少有一个`key`发生了改变则做`RDB`持久化，在`300s`中至少`100`个`key`发生了改变则做`RDB`持久化，在`60s`中至少有`10000`个`key`发生了改变则做`RDB`持久化。
+  >
+  >  - `save 秒数 写操作次数`：`RDB`是整个内存压缩过的快照`SnapShot`，若想禁用`save`可以将其注释还可以将`save`传入空字符串。
+  >
+  >  - `stop-writes-on-bgsave-error`：当`Redis`发生错误无法写入磁盘时，直接关闭`Redis`的写操作，推荐`yes`。
+  >
+  >    ```shell
+  >    # However if you have setup your proper monitoring of the Redis server
+  >    # and persistence, you may want to disable this feature so that Redis will
+  >    # continue to work as usual even if there are problems with disk,
+  >    # permissions, and so forth.
+  >    stop-writes-on-bgsave-error yes
+  >    ```
+  >
+  >  - `rdbcompression`压缩文件：对于存储到磁盘中的快照，可以设置是否进行压缩存储，如果是的话，`Redis`会采用`LZF`算法进行压缩。如果你不想消耗`CPU`进行压缩的话，可以将其关闭，`Redis`该项压缩功能默认是打开的。
+  >
+  >    ```shell
+  >    # Compress string objects using LZF when dump .rdb databases?
+  >    # By default compression is enabled as it's almost always a win.
+  >    # If you want to save some CPU in the saving child set it to 'no' but
+  >    # the dataset will likely be bigger if you have compressible values or keys.
+  >    rdbcompression yes
+  >    ```
+  >
+  >  - `rdbchecksum`检查完整性：在存储快照后，可以让`Redis`使用`CRC64`算法进行数据校验，但是这样做会增加约`10%`的性能消耗，如果需要获取最大的性能提升可以将该项校验数据完整性的功能关闭。`Redis`该项检查数据完整性的功能默认是开启的。
+  >
+  >    ```shell
+  >    # RDB files created with checksum disabled have a checksum of zero that will
+  >    # tell the loading code to skip the check.
+  >    rdbchecksum yes
+  >    ```
+  >
   
+- 关于如何进行`RDB`备份？
 
-### 10.2 `AOF`持久化
+  > 通过查看`redis.conf`可以看到`dump.rdb`默认是保存在`redis`目录中的，我们需要先使用`save 20 3`表示如果在`20s`之内修改了`3`个`key`那么可以就需要做`RDB`持久化。
+  >
+  > 配置文件弄好了之后，重启服务端，去到客户端，更改至少三个`key`，然后等待一下，可以看到`redis/src`目录中出现了`dump.rdb`文件。
+  >
+  > ![](https://img-blog.csdnimg.cn/13048a4f51a24c4a927767e377095523.png)
+  >
+  > 将`dump.rdb`文件进行备份，`cp dump.rdb ./d.rdb`
+  >
+  > 然后删除`dump.rdb`，在客户端中进行`flushdb`，因为`flushdb`也会产生`dump.rdb`所以还要回去删除一次`dump.rdb`文件，再回到客户端使用`keys *`检查一下，确保没有`key`
+  >
+  > 将`d.rdb`改回`dump.rdb`然后重启`redis-server`，打开`redis-cli`使用`keys *`可以看到`key`复原了。
+
+- `RDB`的优点？
+
+  > 1. 适合大规模的数据恢复，但不适用于对数据完整性和一致性有高要求的数据恢复
+  > 2. 节省磁盘空间，又因为进行的是写时拷贝然后用子进程生成的备份文件，所以效率很高，但是如果数据特别特别大，还是比较消耗性能的
+  > 3. 恢复速度快
+
+- `RDB`的缺点？
+
+  > 1. 虽然使用了`Fork`子进程提高了效率，但是由于内存中的数据克隆了一份那么就需要考虑大致`2`倍膨胀性
+  > 2. 因为是在某时间间隔做的数据备份，那么如果在这个时间间隔之内`Redis`服务`Down`掉的话，则上次备份到`Down`掉的这一段时间内的数据将会丢失。
+
+- 如何停止`RDB`?
+
+  > 只需要将`redis.conf`中的`save 20 3`该行注释掉即可
+
+- `RDB`总结
+
+  > 1. 生成的`RDB`文件会在`redis`服务启动时候恢复数据
+  > 2. `RDB`文件时非常紧凑的文件
+  > 3. `RDB`在保存`RDB`文件的时候，父进程唯一要做的就是`fork`出一个子进程，接下来所有的工作全部都交由父进程来完成，父进程不需要再做其它的`I/O`操作，所以`RDB`可以最大化`redis`的性能，与后面的`AOF`相比，`RDB`恢复数据会更快一些
+  > 4. `Redis`数据丢失风险比较大，虽然是`fork`子进程在做事，但是如果数据特别庞大的话，还是挺耗时的，可能会导致`Redis`在一些毫秒级层级无法响应客户端的请求
