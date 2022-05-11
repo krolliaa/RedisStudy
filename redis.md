@@ -1978,3 +1978,132 @@ public class SecKill_redisByScript {
   >
   > **<font color = "red">只要硬盘许可，应该尽量减少`AOF rewrite`的频率，`AOF`重写的基础大小默认值`64M`太小了，可以设到`5G`以上。
   > 默认超过原大小`100%`大小时重写可以改到适当的数值</font>**
+
+## 11. `Redis`主从复制
+
+- 主从复制是什么？
+
+  > 主机数据更新后根据配置和策略，自动同步到备用机器的`master/slaver`机制，`Master`以写为主，`Slave`以读为主
+
+- 主从复制可以干什么？
+
+  > 读写分离，性能扩展
+  >
+  > 容灾快速恢复
+  >
+  > ![](https://img-blog.csdnimg.cn/0ecc1be16f8548959ff99445437b67d5.png)
+
+- 主从复制如何操作？
+
+  > 设置多个`redis.conf`配置文件：
+  >
+  > 1. `redis6379.conf`
+  >
+  >    ```
+  >    include /usr/local/redis-7.0.0/redis.conf
+  >    pidfile /var/run/redis_6379.pid
+  >    port 6379
+  >    dbfilename dump6379.rdb
+  >    ```
+  >
+  > 2. `redis6380.conf`
+  >
+  >    ```
+  >    include /usr/local/redis-7.0.0/redis.conf
+  >    pidfile /var/run/redis_6380.pid
+  >    port 6380
+  >    dbfilename dump6380.rdb
+  >    ```
+  >
+  > 3. `redis6381.conf`
+  >
+  >    ```
+  >    include /usr/local/redis-7.0.0/redis.conf
+  >    pidfile /var/run/redis_6381.pid
+  >    port 6381
+  >    dbfilename dump6381.rdb
+  >    ```
+  >
+  > `slave-priority 10`：设置从机的优先级，值越小，优先级越高，用于选举主机时的使用。默认为：`100`
+  >
+  > 启动三台`Redis`服务器：
+  >
+  > ```
+  > redis-server redis6379.conf
+  > redis-server redis6380.conf
+  > redis-server redis6381.conf
+  > ```
+  >
+  > 查看系统进程，确认是否启动：
+  >
+  > ```
+  > ps -ef | grep redis
+  > ```
+  >
+  > 查看主机的运行情况：
+  >
+  > ```
+  > redis-cli -p 6379
+  > info replication
+  > 
+  > redis-cli -p 6380
+  > info replication
+  > 
+  > redis-cli -p 6381
+  > info replication
+  > ```
+  >
+  > 配置从机：
+  >
+  > `slave <ip> <port>`称为某个实例的从服务器
+  >
+  > 1. 在`6380 6381`上执行：`slaveof 127.0.0.1 6379`[`redis-cli`中执行]
+  > 2. 查看信息：`info replication`
+  >
+  > **<font color="red">主机写，从机读，在从机上写数据会报错</font>**
+  >
+  > 主机挂掉直接重启即可，从机挂掉需重设主从关系：`slaveof 127.0.0.1 6379`，如果嫌麻烦可以将配置增加到配置文件中，永久生效
+
+- 常用三招
+
+  > 第一招：一主二仆
+  >
+  > 切入点问题？`slave1 slave2`是从头开始赋值还是从切入点开始赋值？比如从`k4`进来，之前的`k1 k2 k3`是否也可以复制？
+  >
+  > 从机是否可以写？`set`可否？ 
+  >
+  > 主机`shutdown`后情况如何？从机是上位还是原地待命？
+  >
+  > 主机又回来了后，主机新增记录，从机还能否顺利复制？ 
+  >
+  > 其中一台从机`down`后情况如何？依照原有它能跟上大部队吗？
+  >
+  >  
+  >
+  > 第二招：薪火相传
+  >
+  >  上一个`slave`可以是下一个`slave`的`Master`，`slave`同样可以接收其他`slaves`的连接和同步请求，那么该`slave`作为了链条中下一个的`master`, 可以有效减轻`master`的写压力,去中心化降低风险。
+  >
+  > 用`slaveof <ip> <port>`
+  >
+  > 中途变更转向:会清除之前的数据，重新建立拷贝最新的
+  >
+  > 风险是一旦某个`slave`宕机，后面的`slave`都没法备份
+  >
+  > 主机挂了，从机还是从机，无法写数据了
+  >
+  > 
+  >
+  > 第三招：反客为主
+  >
+  > 当一个`master`宕机后，后面的`slave`可以立刻升为`master`，其后面的`slave`不用做任何修改。
+  >
+  > 用`slaveof  no one`将从机变为主机。
+
+- 主从复制原理
+
+  > - `slave`启动成功连接到`master`后会发送一个`sync`命令
+  > - `Master`接到命令启动后台的存盘进程，同时收集所有接收到的用于修改数据集命令， 在后台进程执行完毕之后，`master`将传送整个数据文件到`slave`，以完成一次完全同步
+  > - 全量复制：而`slave`服务在接收到数据库文件数据后，将其存盘并加载到内存中
+  > - 增量复制：`master`继续将新的所有收集到的修改命令依次传给`slave`，完成同步
+  > - 但是只要是重新连接`master`，一次完全同步（全量复制)将被自动执行
