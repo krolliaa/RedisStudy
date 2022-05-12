@@ -2107,3 +2107,123 @@ public class SecKill_redisByScript {
   > - 全量复制：而`slave`服务在接收到数据库文件数据后，将其存盘并加载到内存中
   > - 增量复制：`master`继续将新的所有收集到的修改命令依次传给`slave`，完成同步
   > - 但是只要是重新连接`master`，一次完全同步（全量复制)将被自动执行
+  
+- 哨兵模式
+
+  > 哨兵模式是反客为主模式的进化版本，它可以不用手动`slaveof no one`将从服务器升为主服务器，可以后台监控主机是否故障，如果故障了可以根据投票数自动将从服务器转成主服务器。
+  >
+  > ![](https://img-blog.csdnimg.cn/f796c68e06354df9823fcfdc76d8651a.png)
+  >
+  > 如何操作？
+  >
+  > - 调整为一主二仆模式，在`/myredis`目录下新建：`sentinel.conf`，名字不能出错。
+  >
+  > - 配置哨兵填写内容：`sentinel monitor mymaster 127.0.0.1 6379 1` ---> 哨兵监控端口为`6379`的服务器，当出错了，只需一个哨兵同意迁移即可更换服务器。
+  >
+  > - 启动哨兵：`/usr/local/bin` --> `redis`做压力测试可以用自带的`redis-benchmark`工具。
+  >
+  > - 执行`redis-sentinel /myredis/sentinel.conf`启动哨兵。
+  >
+  > 当主机挂掉的时候可以在哨兵窗口看到日志，某台从服务器切换成了新的主服务器。那么是根据什么东西选择某台从服务器切换成主服务器呢？
+  >
+  > **<font color="red">选择的条件依次为：</font>**
+  >
+  > 1. **<font color="black">选择优先级`slave-priority`靠前的</font>**
+  > 2. **<font color="black">选择偏移量最大的【所谓偏移量就是跟主服务器数据同步最多数据的那个】</font>**
+  > 3. **<font color="black">选择`runid`最小的从服务器，`runid`是创建服务器的时候就创建的，每个`redis`实例启动后都会随机生成一个`40`位的`runid`</font>**
+  >
+  > **<font color="red">若原先的主服务器再次启动，则切换成从服务器角色</font>**
+  >
+  > **<font color="black">优先级在`redis.conf`中默认：`slave-priority 100`，值越小优先级越高</font>**
+  >
+  > ```java
+  > private static JedisSentinelPool jedisSentinelPool=null;
+  > public static  Jedis getJedisFromSentinel(){
+  > 	if(jedisSentinelPool==null){
+  > 		Set<String> sentinelSet=new HashSet<>();
+  > 		sentinelSet.add("192.168.11.103:26379");
+  > 		JedisPoolConfig jedisPoolConfig =new JedisPoolConfig();
+  > 		jedisPoolConfig.setMaxTotal(10); //最大可用连接数
+  > 		jedisPoolConfig.setMaxIdle(5); //最大闲置连接数
+  > 		jedisPoolConfig.setMinIdle(5); //最小闲置连接数
+  > 		jedisPoolConfig.setBlockWhenExhausted(true); //连接耗尽是否等待
+  > 		jedisPoolConfig.setMaxWaitMillis(2000); //等待时间
+  > 		jedisPoolConfig.setTestOnBorrow(true); //取连接的时候
+  > 	    //进行一下测试 ping pong
+  > 		jedisSentinelPool=new JedisSentinelPool("mymaster",sentinelSet,jedisPoolConfig);
+  >         return jedisSentinelPool.getResource();
+  > 	}else{
+  >         return jedisSentinelPool.getResource();
+  > 	}
+  > }
+  > ```
+
+## 12. `Redis`集群
+
+### 12.1 问题
+
+容量不够的时候，`Redis`服务器要如何进行扩容？并发写操作，`Redis`如何分摊？
+
+另外，主从模式、新货相传、反客为主、哨兵模式，如果主机宕机，导致主服务器的`IP`地址发生了变化，应用程序中配置需要修改对应的主机地址、端口等信息。
+
+之前通过代理主机来解决，但是`Redis 3.0`中提供了解决方案。就是无中心化集群配置。
+
+### 12.2 什么是集群？
+
+`Redus`集群实现了对`Redis`的水平扩容，即启动了`N`个`Redis`节点，将整个数据库分布存储在这`N`个节点中，每个节点存储总数据的`1/N`。
+
+`Redis`集群通过分区`(partition)`来提供一定程度的可用性`(availability)`：即使集群中有一部分节点失效或者无法进行通讯，集群也可以继续处理命令请求。
+
+## 13. `Redis`应用问题解决
+
+在生产环境中，会因为很多的原因造成访问请求绕过了缓存，都需要访问数据库持久层，虽然对`Redis`缓存服务器不会造成影响，但是数据库的负载就会增大，使得缓存的作用降低
+
+### 13.1 缓存穿透
+
+缓存穿透指的是**<font color="red">查询一个根本不存在的数据</font>**，缓存层和持久层都不会命中。在日常工作中处于容错的考虑，如果从持久层查不到数据则不写入缓存层，缓存穿透导致不存在的数据每次请求都要到持久层去查询，失去了缓存保护后端持久层的意义。【一般都是恶意攻击】
+
+![](https://imgconvert.csdnimg.cn/aHR0cHM6Ly9xcWFkYXB0LnFwaWMuY24vdHhkb2NwaWMvMC81ZWQzMTk3MDYzMjVjOTgyN2M0NDU5MDZmOWQ4YzIyOS8w?x-oss-process=image/format,png)
+
+缓存穿透问题可能会使后端存储负载加大，由于很多后端持久层不具备高并发性，甚至可能造成后端存储宕机。通常可以再程序中统计总调用数、缓存层命中数、如果同一个`key`的缓存命中率很低，可能就是出现了缓存穿透的问题。
+
+造成缓存穿透的基本原因有两个。第一：自身业务代码或者数据出现问题【例如：`set get`的`key`不一样】，第二：一些恶意攻击、爬虫等造成大量空命中（爬取线上商城商品数据，超大循环递增商品的`ID`）
+
+解决方案：
+
+1. **<font color="red">对空值做缓存。</font>**就算数据访问不到，查询返回的数据为空（不管数据是否存在），我们也做缓存，把这个空结果`null`进行缓存，并且设置空结果的的过期时间会很短，最长不超过五分钟。【临时应急方案】
+2. **<font color="red">设置可访问的名单（白名单）。</font>**使用`bitmaps`类型定义一个可以访问的名单，名单`id`作为`bitmaps`的偏移量，每次访问和`bitmaps`里面的`id`进行比较，如果访问`id`不在`bitmaps`里面，则进行拦截，不允许访问。【效率比较低，因为还要访问`bitmaps`】
+3. **<font color="red">采用布隆过滤器。</font>**`Bloom Filter 1970由布隆提出`，它实际上底层还是`bitmaps`但是对其做了优化使其效率更高，实际上布隆过滤器就是一个很长的二进制向量（位图）和一系列随机映射函数（哈希函数）。【命中率可能不是很准确】
+4. **<font color="red">对`Redis`进行实时监控。</font>**当发现`Redis`的命中率开始急速降低时，需要排查访问对象和访问的数据，设置黑名单限制服务。
+
+### 13.2 缓存击穿
+
+某个`key`存在并且是一个热点数据，大量并发请求不断访问该数据，在该`key`数据失效的一瞬间，会大量访问后端持久层数据库，并回设到缓存，这个时候的大并发请求可能会在这一瞬间把数据库压垮。
+
+![](https://img-blog.csdnimg.cn/3ec06bb3338f49789bcdc3ad3c54333d.png)
+
+解决方案：
+
+1. **<font color="red">预先设置热门数据。</font>**在`Redis`高峰访问之前，把一些热门数据提前存入到`Redis`里面，加大这些热门数据的`key`时长。
+
+2. **<font color="red">适时调整。</font>**现场监控哪些数据热门，实时调整`key`的过期时长。
+
+3. **<font color="red">使用锁。</font>**使用锁必定会降低效率，如果可以忍受的话还是可以用的。
+
+   - 就是在缓存失效的时候【判断拿出来的值为空】，不是立即去数据库拿数据，而是先使用缓存工具的某些带成功操作返回值的操作比如`Redis`中的`SETNX`，去设置一个`mutex key`。【设置排它锁，相当于其他人拿到的是空数据】
+     - 如果操作返回成功的时候，再去数据库拿数据，然后回设到缓存，最后删除`mutex key`
+     - 如果操作返回失败，证明由线程在向数据库拿数据，那么将当前线程睡眠一段时间再重新`get`缓存
+
+   ![](https://img-blog.csdnimg.cn/707ec8bea866433a9c60d828d6f0dcc3.png)
+
+### 13.3 缓存雪崩
+
+雪崩问题产生原因在于：在集中的某段极短时间内，有大量的数据`key`过期了。这时候大量数据访问底层数据库，就造成了缓存雪崩。数据库直接崩了。对底层系统的冲击非常可怕！
+
+解决方案：
+
+1. **<font color="red">构建多级缓存结构。</font>**`nginx + redis + 其它缓存如 ehcache 等`
+2. **<font color="red">使用锁或者队列。</font>**用加锁或者队列的方式来保证不会有大量的线程对数据库一次性进行读写，从而避免失效的时候大量的并发请求落到底层存储系统上。不适用高并发情况，效率较低。
+3. **<font color="red">设置过期标志更新缓存。</font>**记录缓存数据是否过期，提前预知一下，然后如果要过期了，就通知另外的线程在后台去更新实际`key`的缓存。
+4. **<font color="red">将缓存失效时间分散开。</font>**比如我们在原有的失效时间基础上增加一个随机值，比如`1-5`分钟随机，这样每一个缓存的过期时间的重复率就会大大降低，减小缓存雪崩的可能性。
+
+![](https://img-blog.csdnimg.cn/0e21fc6386cc4179a34c34a001af2fa9.png)
